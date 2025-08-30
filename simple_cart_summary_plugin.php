@@ -6,54 +6,85 @@
  * Author: Rocco Fusella
  * Author URI: https://roccofusella.it
  * Text Domain: wc-cart-summary
+ * 
+ * Questo plugin crea un widget per il riepilogo del carrello che mostra:
+ * - Prodotti già nel carrello
+ * - Prodotti che si stanno aggiungendo
+ * - Totale complessivo
+ * Supporta prodotti con varianti e prezzi differenti
  */
 
-// Previene l'accesso diretto
+// Previene l'accesso diretto al file
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Verifica se WooCommerce è attivo
+// Verifica se WooCommerce è attivo prima di inizializzare il plugin
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
+    // Mostra un avviso nell'admin se WooCommerce non è attivo
     add_action('admin_notices', function() {
         echo '<div class="notice notice-error"><p>Il plugin "Cart Product Summary" richiede WooCommerce per funzionare.</p></div>';
     });
     return;
 }
 
+/**
+ * Classe principale del plugin Cart Product Summary Pro
+ * Gestisce la visualizzazione del riepilogo carrello nelle pagine prodotto
+ */
 class WC_Cart_Product_Summary_Pro {
     
+    /**
+     * Opzioni di default del plugin
+     * Configurano colori, comportamenti e dimensioni del widget
+     */
     private $default_options = array(
-        'show_price_zero' => 'no',
-        'auto_add_pages' => 'yes',
-        'cart_bg_color' => '#e3f2fd',
-        'cart_border_color' => '#2196f3',
-        'selected_bg_color' => '#fff8e1',
-        'selected_border_color' => '#ff9800',
-        'total_bg_color' => '#e8f5e8',
-        'total_border_color' => '#4caf50',
-        'title_color' => '#333333',
-        'title_size' => '20',
-        'text_color' => '#555555',
-        'text_size' => '14'
+        'show_price_zero' => 'no',        // Mostra prezzo quando quantità è zero
+        'auto_add_pages' => 'yes',        // Aggiunge automaticamente il widget a tutte le pagine prodotto
+        'cart_bg_color' => '#e3f2fd',     // Colore sfondo sezione "Nel Carrello"
+        'cart_border_color' => '#2196f3', // Colore bordo sezione "Nel Carrello"
+        'selected_bg_color' => '#fff8e1',  // Colore sfondo sezione "Stai Aggiungendo"
+        'selected_border_color' => '#ff9800', // Colore bordo sezione "Stai Aggiungendo"
+        'total_bg_color' => '#e8f5e8',    // Colore sfondo sezione "Totale"
+        'total_border_color' => '#4caf50', // Colore bordo sezione "Totale"
+        'title_color' => '#333333',       // Colore del titolo
+        'title_size' => '20',             // Dimensione font del titolo
+        'text_color' => '#555555',        // Colore del testo
+        'text_size' => '14'               // Dimensione font del testo
     );
     
+    /**
+     * Costruttore della classe - inizializza hooks e shortcode
+     */
     public function __construct() {
+        // Hook per inizializzazione plugin
         add_action('init', array($this, 'init'));
+        
+        // Hook per pannello amministrazione
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'admin_init'));
+        
+        // Hook per frontend
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
-        add_shortcode('cart_product_summary', array($this, 'display_cart_summary'));
-        add_action('wp_ajax_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
-        add_action('wp_ajax_nopriv_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
         add_action('wp_head', array($this, 'add_dynamic_styles'));
         
-        // Auto-add se abilitato
+        // Registra lo shortcode
+        add_shortcode('cart_product_summary', array($this, 'display_cart_summary'));
+        
+        // Hook AJAX per aggiornamenti carrello (utenti loggati e non)
+        add_action('wp_ajax_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
+        add_action('wp_ajax_nopriv_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
+        
+        // Auto-add del widget se abilitato nelle impostazioni
         if ($this->get_option('auto_add_pages') === 'yes') {
             add_action('woocommerce_single_product_summary', array($this, 'auto_add_widget'), 25);
         }
     }
     
+    /**
+     * Inizializza il plugin
+     * Crea le opzioni di default se non esistono già nel database
+     */
     public function init() {
         // Inizializza opzioni default se non esistono
         if (!get_option('wc_cart_summary_options')) {
@@ -61,25 +92,40 @@ class WC_Cart_Product_Summary_Pro {
         }
     }
     
+    /**
+     * Aggiunge la pagina di amministrazione al menu Impostazioni
+     */
     public function add_admin_menu() {
         add_options_page(
-            'Cart Product Summary',
-            'Cart Summary',
-            'manage_options',
-            'cart-product-summary',
-            array($this, 'admin_page')
+            'Cart Product Summary',     // Titolo pagina
+            'Cart Summary',             // Titolo menu
+            'manage_options',           // Capacità richiesta
+            'cart-product-summary',     // Slug menu
+            array($this, 'admin_page')  // Callback per il contenuto
         );
     }
     
+    /**
+     * Registra le impostazioni del plugin per il pannello admin
+     */
     public function admin_init() {
         register_setting('wc_cart_summary_group', 'wc_cart_summary_options');
     }
     
+    /**
+     * Ottiene un'opzione specifica con fallback al valore di default
+     * @param string $key Chiave dell'opzione da recuperare
+     * @return mixed Valore dell'opzione
+     */
     public function get_option($key) {
         $options = get_option('wc_cart_summary_options', $this->default_options);
         return isset($options[$key]) ? $options[$key] : $this->default_options[$key];
     }
     
+    /**
+     * Renderizza la pagina di amministrazione del plugin
+     * Mostra il form per configurare colori, tipografia e comportamenti
+     */
     public function admin_page() {
         $options = get_option('wc_cart_summary_options', $this->default_options);
         ?>
@@ -183,10 +229,16 @@ class WC_Cart_Product_Summary_Pro {
         <?php
     }
     
+    /**
+     * Aggiunge gli stili CSS dinamici basati sulle impostazioni del plugin
+     * Gli stili vengono inseriti solo nelle pagine prodotto
+     */
     public function add_dynamic_styles() {
+        // Applica stili solo nelle pagine prodotto
         if (is_product()) {
             ?>
             <style type="text/css">
+                /* Stili principali del container del widget */
                 .wc-cart-product-summary {
                     background: #f8f9fa !important;
                     border: 2px solid #e9ecef !important;
@@ -195,6 +247,7 @@ class WC_Cart_Product_Summary_Pro {
                     margin: 20px 0 !important;
                     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
                 }
+                /* Stili per il titolo del widget */
                 .wc-cart-product-summary .summary-title {
                     margin: 0 0 20px 0 !important;
                     color: <?php echo $this->get_option('title_color'); ?> !important;
@@ -204,29 +257,35 @@ class WC_Cart_Product_Summary_Pro {
                     padding-bottom: 10px !important;
                     text-align: center !important;
                 }
+                /* Stili generali per le sezioni del riepilogo */
                 .wc-cart-product-summary .summary-section {
                     margin-bottom: 15px !important;
                     padding: 15px !important;
                     border-radius: 8px !important;
                     border: 2px solid !important;
                 }
+                /* Stili per etichette e valori all'interno delle sezioni */
                 .wc-cart-product-summary .summary-label,
                 .wc-cart-product-summary .summary-value {
                     color: <?php echo $this->get_option('text_color'); ?> !important;
                     font-size: <?php echo $this->get_option('text_size'); ?>px !important;
                 }
+                /* Colori specifici per la sezione "Nel Carrello" */
                 .wc-cart-product-summary .cart-section {
                     background: <?php echo $this->get_option('cart_bg_color'); ?> !important;
                     border-color: <?php echo $this->get_option('cart_border_color'); ?> !important;
                 }
+                /* Colori specifici per la sezione "Stai Aggiungendo" */
                 .wc-cart-product-summary .selected-section {
                     background: <?php echo $this->get_option('selected_bg_color'); ?> !important;
                     border-color: <?php echo $this->get_option('selected_border_color'); ?> !important;
                 }
+                /* Colori specifici per la sezione "Totale Complessivo" */
                 .wc-cart-product-summary .total-section {
                     background: <?php echo $this->get_option('total_bg_color'); ?> !important;
                     border-color: <?php echo $this->get_option('total_border_color'); ?> !important;
                 }
+                /* Stili per i titoli delle sezioni */
                 .wc-cart-product-summary .section-title {
                     font-weight: 700 !important;
                     color: #333 !important;
@@ -235,6 +294,7 @@ class WC_Cart_Product_Summary_Pro {
                     text-transform: uppercase !important;
                     letter-spacing: 1px !important;
                 }
+                /* Badge per la quantità nella sezione carrello */
                 .wc-cart-product-summary .cart-quantity {
                     background: <?php echo $this->get_option('cart_border_color'); ?> !important;
                     color: white !important;
@@ -242,6 +302,7 @@ class WC_Cart_Product_Summary_Pro {
                     border-radius: 5px !important;
                     font-weight: bold !important;
                 }
+                /* Badge per la quantità nella sezione selezione */
                 .wc-cart-product-summary .selected-quantity {
                     background: <?php echo $this->get_option('selected_border_color'); ?> !important;
                     color: white !important;
@@ -249,6 +310,7 @@ class WC_Cart_Product_Summary_Pro {
                     border-radius: 5px !important;
                     font-weight: bold !important;
                 }
+                /* Badge per la quantità totale */
                 .wc-cart-product-summary .total-quantity {
                     background: <?php echo $this->get_option('total_border_color'); ?> !important;
                     color: white !important;
@@ -256,6 +318,7 @@ class WC_Cart_Product_Summary_Pro {
                     border-radius: 5px !important;
                     font-weight: bold !important;
                 }
+                /* Badge per il totale complessivo (più prominente) */
                 .wc-cart-product-summary .grand-total {
                     background: <?php echo $this->get_option('total_border_color'); ?> !important;
                     color: white !important;
@@ -264,6 +327,7 @@ class WC_Cart_Product_Summary_Pro {
                     font-size: 16px !important;
                     font-weight: bold !important;
                 }
+                /* Layout per le righe del riepilogo */
                 .wc-cart-product-summary .summary-row {
                     display: flex !important;
                     justify-content: space-between !important;
@@ -271,6 +335,7 @@ class WC_Cart_Product_Summary_Pro {
                     padding: 8px 0 !important;
                     border-bottom: 1px dotted #ccc !important;
                 }
+                /* Rimuove il bordo dall'ultima riga di ogni sezione */
                 .wc-cart-product-summary .summary-row:last-child {
                     border-bottom: none !important;
                 }
@@ -279,7 +344,12 @@ class WC_Cart_Product_Summary_Pro {
         }
     }
     
+    /**
+     * Carica gli script JavaScript necessari per il funzionamento del widget
+     * Include la logica per aggiornare il riepilogo in tempo reale
+     */
     public function enqueue_scripts() {
+        // Carica script solo nelle pagine prodotto
         if (is_product()) {
             wp_enqueue_script('jquery');
             
@@ -317,12 +387,27 @@ class WC_Cart_Product_Summary_Pro {
                         
                         if (currentVariationData && currentVariationData.display_price) {
                             price = parseFloat(currentVariationData.display_price);
-                            priceText = currentVariationData.price_html || "";
+                            
+                            if (currentVariationData.price_html) {
+                                var tempDiv = $("<div>").html(currentVariationData.price_html);
+                                var extractedPrice = tempDiv.find(".amount").last().text() || tempDiv.text();
+                                var cleanPrice = extractedPrice.replace(/[^\\d.,]/g, "").replace(",", ".");
+                                if (cleanPrice) {
+                                    priceText = extractedPrice;
+                                }
+                            }
+                            
+                            if (!priceText) {
+                                priceText = price.toLocaleString("it-IT", {
+                                    style: "currency",
+                                    currency: "EUR"
+                                });
+                            }
                         } else {
                             var $priceElement = $(".woocommerce-variation-price .amount, .price .amount, .woocommerce-Price-amount").first();
                             if ($priceElement.length) {
                                 priceText = $priceElement.text();
-                                var priceMatch = priceText.match(/[\d.,]+/);
+                                var priceMatch = priceText.match(/[\\d.,]+/);
                                 price = priceMatch ? parseFloat(priceMatch[0].replace(",", ".")) : 0;
                             }
                         }
@@ -351,7 +436,6 @@ class WC_Cart_Product_Summary_Pro {
                             var unitPrice = priceData.price;
                             var formattedPrice = priceData.formatted;
                             
-                            // Se quantità è zero e non si vuole mostrare il prezzo
                             if (selectedQuantity === 0 && !showPriceZero) {
                                 unitPrice = 0;
                                 formattedPrice = "€0,00";
@@ -361,7 +445,6 @@ class WC_Cart_Product_Summary_Pro {
                             var totalQuantity = cartQuantity + selectedQuantity;
                             var grandTotal = cartTotal + selectedTotal;
                             
-                            // Aggiorna i valori
                             if (showCart) {
                                 $summary.find(".cart-quantity").text(cartQuantity);
                                 $summary.find(".cart-total").text(cartTotal.toLocaleString("it-IT", {
@@ -387,7 +470,6 @@ class WC_Cart_Product_Summary_Pro {
                                 }));
                             }
                             
-                            // Logica di visualizzazione sezioni
                             if (showCart && cartQuantity > 0) {
                                 $summary.find(".cart-section").show();
                             } else {
@@ -400,7 +482,6 @@ class WC_Cart_Product_Summary_Pro {
                                 $summary.find(".selected-section").hide();
                             }
                             
-                            // Logica per mostrare il widget
                             var shouldShowWidget = false;
                             if (showCart && cartQuantity > 0) shouldShowWidget = true;
                             if (showSelected && selectedQuantity > 0) shouldShowWidget = true;
@@ -445,7 +526,14 @@ class WC_Cart_Product_Summary_Pro {
         }
     }
     
+    /**
+     * Funzione principale per visualizzare il widget riepilogo carrello
+     * Gestisce lo shortcode [cart_product_summary] con tutti i suoi parametri
+     * @param array $atts Attributi dello shortcode
+     * @return string HTML del widget
+     */
     public function display_cart_summary($atts = array()) {
+        // Mostra il widget solo nelle pagine prodotto
         if (!is_product()) {
             return '';
         }
@@ -455,46 +543,57 @@ class WC_Cart_Product_Summary_Pro {
             return '';
         }
         
+        // Unisce i parametri dello shortcode con i valori di default
         $atts = shortcode_atts(array(
-            'title' => 'Riepilogo Completo Prodotto',
-            'show_price_zero' => $this->get_option('show_price_zero'),
-            'show_cart' => 'yes',
-            'show_selected' => 'yes', 
-            'show_total' => 'yes',
-            'cart_color' => '',
-            'selected_color' => '',
-            'total_color' => '',
-            'title_size' => '',
-            'text_size' => ''
+            'title' => 'Riepilogo Completo Prodotto',              // Titolo del widget
+            'show_price_zero' => $this->get_option('show_price_zero'), // Mostra prezzo quando qty=0
+            'show_cart' => 'yes',          // Mostra sezione "Nel Carrello"
+            'show_selected' => 'yes',      // Mostra sezione "Stai Aggiungendo"
+            'show_total' => 'yes',         // Mostra sezione "Totale Complessivo"
+            'cart_color' => '',            // Colore personalizzato sezione carrello
+            'selected_color' => '',        // Colore personalizzato sezione selezione
+            'total_color' => '',           // Colore personalizzato sezione totale
+            'title_size' => '',            // Dimensione personalizzata titolo
+            'text_size' => ''              // Dimensione personalizzata testo
         ), $atts);
         
+        // Ottiene i dati di base del prodotto
         $product_id = $product->get_id();
         $unit_price = $product->get_price();
         
-        // CSS inline per parametri shortcode
+        // Genera CSS inline per i parametri personalizzati dello shortcode
         $inline_style = '';
+        
+        // Colore personalizzato per la sezione carrello
         if (!empty($atts['cart_color'])) {
             $inline_style .= '.cart-section { background-color: ' . esc_attr($atts['cart_color']) . ' !important; }';
         }
+        // Colore personalizzato per la sezione selezione
         if (!empty($atts['selected_color'])) {
             $inline_style .= '.selected-section { background-color: ' . esc_attr($atts['selected_color']) . ' !important; }';
         }
+        // Colore personalizzato per la sezione totale
         if (!empty($atts['total_color'])) {
             $inline_style .= '.total-section { background-color: ' . esc_attr($atts['total_color']) . ' !important; }';
         }
+        // Dimensione personalizzata del titolo
         if (!empty($atts['title_size'])) {
             $inline_style .= '.summary-title { font-size: ' . intval($atts['title_size']) . 'px !important; }';
         }
+        // Dimensione personalizzata del testo
         if (!empty($atts['text_size'])) {
             $inline_style .= '.summary-label, .summary-value { font-size: ' . intval($atts['text_size']) . 'px !important; }';
         }
         
+        // Inizia il buffer di output per catturare l'HTML generato
         ob_start();
         
+        // Inserisce gli stili personalizzati se presenti
         if ($inline_style) {
             echo '<style>' . $inline_style . '</style>';
         }
         ?>
+        <!-- Container principale del widget con attributi di configurazione -->
         <div class="wc-cart-product-summary" 
              data-product-id="<?php echo esc_attr($product_id); ?>"
              data-show-price-zero="<?php echo esc_attr($atts['show_price_zero']); ?>"
@@ -502,10 +601,13 @@ class WC_Cart_Product_Summary_Pro {
              data-show-selected="<?php echo esc_attr($atts['show_selected']); ?>"
              data-show-total="<?php echo esc_attr($atts['show_total']); ?>">
             
+            <!-- Titolo del widget -->
             <h4 class="summary-title"><?php echo esc_html($atts['title']); ?></h4>
             
+            <!-- Contenuto principale del widget (nascosto inizialmente) -->
             <div class="summary-content" style="display: none;">
                 
+                <!-- Sezione "Nel Carrello" - mostra prodotti già aggiunti -->
                 <?php if ($atts['show_cart'] === 'yes'): ?>
                 <div class="summary-section cart-section" style="display: none;">
                     <div class="section-title">Nel Carrello</div>
@@ -520,6 +622,7 @@ class WC_Cart_Product_Summary_Pro {
                 </div>
                 <?php endif; ?>
                 
+                <!-- Sezione "Stai Aggiungendo" - mostra selezione corrente -->
                 <?php if ($atts['show_selected'] === 'yes'): ?>
                 <div class="summary-section selected-section" style="display: none;">
                     <div class="section-title">Stai Aggiungendo</div>
@@ -529,6 +632,7 @@ class WC_Cart_Product_Summary_Pro {
                     </div>
                     <div class="summary-row">
                         <span class="summary-label">Prezzo unitario:</span>
+                        <!-- Qui viene mostrato il prezzo formattato correttamente -->
                         <span class="summary-value summary-unit-price">€0,00</span>
                     </div>
                     <div class="summary-row">
@@ -538,6 +642,7 @@ class WC_Cart_Product_Summary_Pro {
                 </div>
                 <?php endif; ?>
                 
+                <!-- Sezione "Totale Complessivo" - somma carrello + selezione -->
                 <?php if ($atts['show_total'] === 'yes'): ?>
                 <div class="summary-section total-section">
                     <div class="section-title">Totale Complessivo</div>
@@ -553,28 +658,42 @@ class WC_Cart_Product_Summary_Pro {
                 <?php endif; ?>
             </div>
             
+            <!-- Messaggio mostrato quando non ci sono quantità selezionate -->
             <div class="no-quantity">
                 <p>Seleziona una quantità per vedere il riepilogo completo</p>
             </div>
         </div>
         <?php
         
+        // Ritorna l'HTML generato e pulisce il buffer
         return ob_get_clean();
     }
     
+    /**
+     * Aggiunge automaticamente il widget alle pagine prodotto
+     * Utilizzata quando l'auto-add è abilitato nelle impostazioni
+     */
     public function auto_add_widget() {
         echo do_shortcode('[cart_product_summary]');
     }
     
+    /**
+     * Handler AJAX per recuperare quantità e totale del prodotto nel carrello
+     * Utilizzata dal JavaScript per aggiornare il widget in tempo reale
+     */
     public function ajax_get_cart_quantity() {
+        // Verifica il nonce per sicurezza
         check_ajax_referer('cart_summary_nonce', 'nonce');
         
         $product_id = intval($_POST['product_id']);
-        $cart_quantity = 0;
-        $cart_total = 0;
+        $cart_quantity = 0;  // Quantità totale del prodotto nel carrello
+        $cart_total = 0;     // Valore totale del prodotto nel carrello
         
+        // Controlla se il carrello esiste e non è vuoto
         if (WC()->cart && !WC()->cart->is_empty()) {
+            // Itera attraverso tutti gli item del carrello
             foreach (WC()->cart->get_cart() as $cart_item) {
+                // Trova gli item che corrispondono al prodotto corrente (incluse le varianti)
                 if ($cart_item['product_id'] == $product_id || $cart_item['variation_id'] == $product_id) {
                     $cart_quantity += $cart_item['quantity'];
                     $cart_total += $cart_item['line_total'];
@@ -582,6 +701,7 @@ class WC_Cart_Product_Summary_Pro {
             }
         }
         
+        // Ritorna i dati in formato JSON
         wp_send_json_success(array(
             'quantity' => $cart_quantity,
             'total' => $cart_total
@@ -589,5 +709,8 @@ class WC_Cart_Product_Summary_Pro {
     }
 }
 
-// Inizializza il plugin
+/**
+ * Inizializzazione del plugin
+ * Crea un'istanza della classe principale per attivare tutte le funzionalità
+ */
 new WC_Cart_Product_Summary_Pro();
