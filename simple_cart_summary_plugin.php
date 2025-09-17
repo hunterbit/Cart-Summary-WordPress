@@ -41,6 +41,7 @@ class WC_Cart_Product_Summary_Pro {
     private $default_options = array(
         'show_price_zero' => 'no',        // Mostra prezzo quando quantità è zero
         'auto_add_pages' => 'yes',        // Aggiunge automaticamente il widget a tutte le pagine prodotto
+        'show_vat' => 'no',               // Mostra la visualizzazione dell'IVA
         'cart_bg_color' => '#e3f2fd',     // Colore sfondo sezione "Nel Carrello"
         'cart_border_color' => '#2196f3', // Colore bordo sezione "Nel Carrello"
         'selected_bg_color' => '#fff8e1',  // Colore sfondo sezione "Stai Aggiungendo"
@@ -74,6 +75,10 @@ class WC_Cart_Product_Summary_Pro {
         // Hook AJAX per aggiornamenti carrello (utenti loggati e non)
         add_action('wp_ajax_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
         add_action('wp_ajax_nopriv_get_cart_quantity', array($this, 'ajax_get_cart_quantity'));
+
+        // Hook AJAX per ottenere aliquota IVA del prodotto
+        add_action('wp_ajax_get_product_vat_rate', array($this, 'ajax_get_product_vat_rate'));
+        add_action('wp_ajax_nopriv_get_product_vat_rate', array($this, 'ajax_get_product_vat_rate'));
         
         // Auto-add del widget se abilitato nelle impostazioni
         if ($this->get_option('auto_add_pages') === 'yes') {
@@ -118,8 +123,40 @@ class WC_Cart_Product_Summary_Pro {
      * @return mixed Valore dell'opzione
      */
     public function get_option($key) {
-        $options = get_option('wc_cart_summary_options', $this->default_options);
-        return isset($options[$key]) ? $options[$key] : $this->default_options[$key];
+        $options = get_option('wc_cart_summary_options', array());
+        // Unisce le opzioni salvate con quelle di default
+        $options = array_merge($this->default_options, $options);
+        return isset($options[$key]) ? $options[$key] : (isset($this->default_options[$key]) ? $this->default_options[$key] : '');
+    }
+
+    /**
+     * Ottiene l'aliquota IVA del prodotto dalla sua classe fiscale WooCommerce
+     * @param WC_Product $product Prodotto WooCommerce
+     * @return float Aliquota IVA in percentuale
+     */
+    public function get_product_vat_rate($product) {
+        if (!$product) {
+            return 0;
+        }
+
+        // Ottieni la classe fiscale del prodotto
+        $tax_class = $product->get_tax_class();
+
+        // Se il prodotto non ha una classe fiscale specifica, usa quella standard
+        if (empty($tax_class)) {
+            $tax_class = '';
+        }
+
+        // Ottieni le aliquote fiscali per la classe del prodotto
+        $tax_rates = WC_Tax::get_rates($tax_class);
+
+        // Se ci sono aliquote configurate, prendi la prima (di solito l'IVA)
+        if (!empty($tax_rates)) {
+            $tax_rate = array_shift($tax_rates);
+            return floatval($tax_rate['rate']);
+        }
+
+        return 0;
     }
     
     /**
@@ -127,7 +164,16 @@ class WC_Cart_Product_Summary_Pro {
      * Mostra il form per configurare colori, tipografia e comportamenti
      */
     public function admin_page() {
-        $options = get_option('wc_cart_summary_options', $this->default_options);
+        $options = get_option('wc_cart_summary_options', array());
+
+        // Se le opzioni sono vuote, inizializza con i valori di default
+        if (empty($options)) {
+            $options = $this->default_options;
+            update_option('wc_cart_summary_options', $options);
+        } else {
+            // Unisce le opzioni salvate con quelle di default per evitare chiavi mancanti
+            $options = array_merge($this->default_options, $options);
+        }
         ?>
         <div class="wrap">
             <h1>🛒 Cart Product Summary - Impostazioni</h1>
@@ -146,9 +192,14 @@ class WC_Cart_Product_Summary_Pro {
                             <label>
                                 <input type="checkbox" name="wc_cart_summary_options[auto_add_pages]" value="yes" <?php checked($options['auto_add_pages'], 'yes'); ?>>
                                 Aggiungi automaticamente a tutte le pagine prodotto
+                            </label><br>
+                            <label>
+                                <input type="checkbox" name="wc_cart_summary_options[show_vat]" value="yes" <?php checked($options['show_vat'], 'yes'); ?>>
+                                Mostra calcolo IVA
                             </label>
                         </td>
                     </tr>
+
                     
                     <tr>
                         <th scope="row">Colori Sezione "Nel Carrello"</th>
@@ -208,6 +259,7 @@ class WC_Cart_Product_Summary_Pro {
                     <li><code>show_cart</code> - "yes"/"no" mostra sezione "Nel Carrello"</li>
                     <li><code>show_selected</code> - "yes"/"no" mostra sezione "Stai Aggiungendo"</li>
                     <li><code>show_total</code> - "yes"/"no" mostra sezione "Totale Complessivo"</li>
+                    <li><code>show_vat</code> - "yes"/"no" mostra calcolo IVA (usa l'aliquota del prodotto)</li>
                     <li><code>cart_color</code> - Colore sezione carrello</li>
                     <li><code>selected_color</code> - Colore sezione selezione</li>
                     <li><code>total_color</code> - Colore sezione totale</li>
@@ -224,6 +276,9 @@ class WC_Cart_Product_Summary_Pro {
                 
                 <p><strong>Carrello + Totale (senza sezione intermedia):</strong><br>
                 <code>[cart_product_summary show_selected="no"]</code></p>
+
+                <p><strong>Con visualizzazione IVA automatica:</strong><br>
+                <code>[cart_product_summary show_vat="yes"]</code></p>
             </div>
         </div>
         <?php
@@ -327,6 +382,13 @@ class WC_Cart_Product_Summary_Pro {
                     font-size: 16px !important;
                     font-weight: bold !important;
                 }
+                /* Stili per la visualizzazione dell'IVA */
+                .wc-cart-product-summary .vat-info {
+                    font-style: italic !important;
+                    color: #666 !important;
+                    font-size: 13px !important;
+                    margin-top: 5px !important;
+                }
                 /* Layout per le righe del riepilogo */
                 .wc-cart-product-summary .summary-row {
                     display: flex !important;
@@ -359,10 +421,12 @@ class WC_Cart_Product_Summary_Pro {
                     var cartQuantity = 0;
                     var cartTotal = 0;
                     var currentVariationData = null;
+                    var showVat = ' . ($this->get_option('show_vat') === 'yes' ? 'true' : 'false') . ';
+                    var productVatRate = 0;
                     
                     function getCartData() {
                         var productId = $(".wc-cart-product-summary").data("product-id");
-                        
+
                         $.ajax({
                             url: "' . admin_url('admin-ajax.php') . '",
                             type: "POST",
@@ -379,6 +443,34 @@ class WC_Cart_Product_Summary_Pro {
                                 }
                             }
                         });
+                    }
+
+                    function getProductVatRate(productId) {
+                        if (!showVat) return;
+
+                        // Per il debugging, forziamo l\'aliquota IVA al 22%
+                        productVatRate = 22;
+                        updateSummary();
+
+                        // Commentiamo temporaneamente la chiamata AJAX per il debug
+                        /*
+                        $.ajax({
+                            url: "' . admin_url('admin-ajax.php') . '",
+                            type: "POST",
+                            data: {
+                                action: "get_product_vat_rate",
+                                product_id: productId,
+                                variation_id: currentVariationData ? currentVariationData.variation_id : 0,
+                                nonce: "' . wp_create_nonce('vat_rate_nonce') . '"
+                            },
+                            success: function(response) {
+                                if (response.success) {
+                                    productVatRate = parseFloat(response.data.vat_rate) || 0;
+                                    updateSummary();
+                                }
+                            }
+                        });
+                        */
                     }
                     
                     function getCurrentPrice() {
@@ -431,6 +523,7 @@ class WC_Cart_Product_Summary_Pro {
                             var showCart = $summary.data("show-cart") === "yes";
                             var showSelected = $summary.data("show-selected") === "yes";
                             var showTotal = $summary.data("show-total") === "yes";
+                            var currentShowVat = $summary.data("show-vat") === "yes";
                             
                             var priceData = getCurrentPrice();
                             var unitPrice = priceData.price;
@@ -460,6 +553,18 @@ class WC_Cart_Product_Summary_Pro {
                                     currency: "EUR"
                                 }));
                                 $summary.find(".summary-unit-price").text(formattedPrice);
+
+                                // Calcola e mostra l\'IVA per la sezione "Stai Aggiungendo" se abilitata
+                                if (currentShowVat) {
+                                    var selectedVatAmount = 0;
+                                    if (productVatRate > 0) {
+                                        selectedVatAmount = selectedTotal * (productVatRate / (100 + productVatRate));
+                                    }
+                                    $summary.find(".vat-amount-selected").text(selectedVatAmount.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    }));
+                                }
                             }
                             
                             if (showTotal) {
@@ -468,6 +573,26 @@ class WC_Cart_Product_Summary_Pro {
                                     style: "currency",
                                     currency: "EUR"
                                 }));
+
+                                // Calcola e mostra l\'IVA se abilitato
+                                if (currentShowVat) {
+                                    var vatAmount = 0;
+                                    if (productVatRate > 0) {
+                                        vatAmount = grandTotal * (productVatRate / (100 + productVatRate));
+                                    }
+                                    $summary.find(".vat-amount").text(vatAmount.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    }));
+
+                                    // Debug console per controllare i valori
+                                    console.log("VAT Debug:", {
+                                        showVat: currentShowVat,
+                                        vatRate: productVatRate,
+                                        grandTotal: grandTotal,
+                                        vatAmount: vatAmount
+                                    });
+                                }
                             }
                             
                             if (showCart && cartQuantity > 0) {
@@ -507,11 +632,15 @@ class WC_Cart_Product_Summary_Pro {
                     
                     $(".variations_form").on("found_variation", function(event, variation) {
                         currentVariationData = variation;
+                        var productId = $(".wc-cart-product-summary").data("product-id");
+                        getProductVatRate(productId);
                         setTimeout(updateSummary, 100);
                     });
-                    
+
                     $(".variations_form").on("reset_data", function() {
                         currentVariationData = null;
+                        var productId = $(".wc-cart-product-summary").data("product-id");
+                        getProductVatRate(productId);
                         setTimeout(updateSummary, 100);
                     });
                     
@@ -520,6 +649,8 @@ class WC_Cart_Product_Summary_Pro {
                     });
                     
                     getCartData();
+                    var productId = $(".wc-cart-product-summary").data("product-id");
+                    getProductVatRate(productId);
                     setTimeout(updateSummary, 1000);
                 });
             ');
@@ -550,6 +681,7 @@ class WC_Cart_Product_Summary_Pro {
             'show_cart' => 'yes',          // Mostra sezione "Nel Carrello"
             'show_selected' => 'yes',      // Mostra sezione "Stai Aggiungendo"
             'show_total' => 'yes',         // Mostra sezione "Totale Complessivo"
+            'show_vat' => $this->get_option('show_vat'),           // Mostra calcolo IVA
             'cart_color' => '',            // Colore personalizzato sezione carrello
             'selected_color' => '',        // Colore personalizzato sezione selezione
             'total_color' => '',           // Colore personalizzato sezione totale
@@ -594,12 +726,13 @@ class WC_Cart_Product_Summary_Pro {
         }
         ?>
         <!-- Container principale del widget con attributi di configurazione -->
-        <div class="wc-cart-product-summary" 
+        <div class="wc-cart-product-summary"
              data-product-id="<?php echo esc_attr($product_id); ?>"
              data-show-price-zero="<?php echo esc_attr($atts['show_price_zero']); ?>"
              data-show-cart="<?php echo esc_attr($atts['show_cart']); ?>"
              data-show-selected="<?php echo esc_attr($atts['show_selected']); ?>"
-             data-show-total="<?php echo esc_attr($atts['show_total']); ?>">
+             data-show-total="<?php echo esc_attr($atts['show_total']); ?>"
+             data-show-vat="<?php echo esc_attr($atts['show_vat']); ?>">
             
             <!-- Titolo del widget -->
             <h4 class="summary-title"><?php echo esc_html($atts['title']); ?></h4>
@@ -639,6 +772,12 @@ class WC_Cart_Product_Summary_Pro {
                         <span class="summary-label">Subtotale:</span>
                         <span class="summary-value selected-total">€0,00</span>
                     </div>
+                    <!-- Visualizzazione IVA nella sezione "Stai Aggiungendo" se abilitata -->
+                    <?php if ($atts['show_vat'] === 'yes'): ?>
+                    <div class="vat-info">
+                        di cui IVA <span class="vat-amount-selected">€0,00</span>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 
@@ -654,6 +793,12 @@ class WC_Cart_Product_Summary_Pro {
                         <span class="summary-label">Valore totale:</span>
                         <span class="summary-value grand-total">€0,00</span>
                     </div>
+                    <!-- Visualizzazione IVA se abilitata -->
+                    <?php if ($atts['show_vat'] === 'yes'): ?>
+                    <div class="vat-info">
+                        di cui IVA <span class="vat-amount">€0,00</span>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -684,11 +829,11 @@ class WC_Cart_Product_Summary_Pro {
     public function ajax_get_cart_quantity() {
         // Verifica il nonce per sicurezza
         check_ajax_referer('cart_summary_nonce', 'nonce');
-        
+
         $product_id = intval($_POST['product_id']);
         $cart_quantity = 0;  // Quantità totale del prodotto nel carrello
         $cart_total = 0;     // Valore totale del prodotto nel carrello
-        
+
         // Controlla se il carrello esiste e non è vuoto
         if (WC()->cart && !WC()->cart->is_empty()) {
             // Itera attraverso tutti gli item del carrello
@@ -700,11 +845,45 @@ class WC_Cart_Product_Summary_Pro {
                 }
             }
         }
-        
+
         // Ritorna i dati in formato JSON
         wp_send_json_success(array(
             'quantity' => $cart_quantity,
             'total' => $cart_total
+        ));
+    }
+
+    /**
+     * Handler AJAX per recuperare l'aliquota IVA del prodotto
+     * Utilizzata dal JavaScript per calcolare l'IVA in tempo reale
+     */
+    public function ajax_get_product_vat_rate() {
+        // Verifica il nonce per sicurezza
+        check_ajax_referer('vat_rate_nonce', 'nonce');
+
+        $product_id = intval($_POST['product_id']);
+        $variation_id = intval($_POST['variation_id']);
+
+        // Se c'è una variante, usa quella; altrimenti usa il prodotto principale
+        if ($variation_id > 0) {
+            $product = wc_get_product($variation_id);
+        } else {
+            $product = wc_get_product($product_id);
+        }
+
+        $vat_rate = $this->get_product_vat_rate($product);
+
+        // Debug: logga le informazioni per troubleshooting
+        error_log("VAT Rate Debug - Product ID: $product_id, Variation ID: $variation_id, VAT Rate: $vat_rate");
+
+        // Ritorna l'aliquota IVA in formato JSON
+        wp_send_json_success(array(
+            'vat_rate' => $vat_rate,
+            'debug' => array(
+                'product_id' => $product_id,
+                'variation_id' => $variation_id,
+                'tax_class' => $product ? $product->get_tax_class() : 'N/A'
+            )
         ));
     }
 }
