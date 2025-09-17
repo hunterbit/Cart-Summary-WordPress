@@ -13,6 +13,7 @@ Un plugin WordPress avanzato che mostra un riepilogo in tempo reale del prodotto
 - 🎨 **Pannello di amministrazione** - Interfaccia user-friendly per personalizzazioni globali
 - 🏷️ **Shortcode flessibile** - Parametri per controllo granulare di ogni istanza
 - 🎯 **Sezioni modulari** - Mostra solo le sezioni che ti servono (Carrello, Selezione, Totale)
+- 💰 **Calcolo IVA automatico** - Visualizza l'IVA in base alla configurazione fiscale WooCommerce
 - 🌈 **Personalizzazione completa** - Colori, tipografia e layout configurabili
 - 📱 **Design responsive** - Perfetto su desktop, tablet e mobile
 - 🔄 **Supporto varianti** - Compatibile con prodotti semplici e variabili
@@ -49,6 +50,7 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 #### Comportamento
 - **Mostra prezzo quando quantità è zero** - Visualizza il prezzo anche con qty=0
 - **Auto-aggiunta alle pagine prodotto** - Inserisce automaticamente il widget in tutte le pagine prodotto
+- **Mostra calcolo IVA** - Visualizza l'IVA calcolata automaticamente dal prodotto WooCommerce
 
 #### Personalizzazione Visiva
 - **Colori sezioni** - Sfondo e bordo per ogni sezione (Carrello, Selezione, Totale)
@@ -70,6 +72,7 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 | `show_cart` | yes/no | yes | Mostra sezione "Nel Carrello" |
 | `show_selected` | yes/no | yes | Mostra sezione "Stai Aggiungendo" |
 | `show_total` | yes/no | yes | Mostra sezione "Totale Complessivo" |
+| `show_vat` | yes/no | Impostazione globale | Mostra calcolo IVA automatico |
 | `cart_color` | hex/colore | - | Colore sfondo sezione carrello |
 | `selected_color` | hex/colore | - | Colore sfondo sezione selezione |
 | `total_color` | hex/colore | - | Colore sfondo sezione totale |
@@ -108,20 +111,27 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 [cart_product_summary show_selected="no" title="Il Tuo Carrello"]
 ```
 
+### Esempio 6: Con IVA Automatica
+```
+[cart_product_summary show_vat="yes" title="Riepilogo con IVA"]
+```
+
 ## 🎨 Sezioni del Widget
 
 ### 🛒 Nel Carrello (show_cart)
 - Quantità già presente nel carrello per questo prodotto
 - Valore totale già nel carrello
 
-### ➕ Stai Aggiungendo (show_selected)  
+### ➕ Stai Aggiungendo (show_selected)
 - Quantità attualmente selezionata
 - Prezzo unitario del prodotto/variante
 - Subtotale della selezione corrente
+- IVA sulla selezione (se abilitata)
 
 ### 🎯 Totale Complessivo (show_total)
 - Quantità totale (carrello + selezione)
 - Valore totale complessivo
+- IVA totale (se abilitata)
 
 ## 🔧 Personalizzazione CSS
 
@@ -136,6 +146,8 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 .wc-cart-product-summary .summary-row           /* Riga dati */
 .wc-cart-product-summary .summary-label         /* Etichetta */
 .wc-cart-product-summary .summary-value         /* Valore */
+.wc-cart-product-summary .vat-info              /* Visualizzazione IVA */
+.wc-cart-product-summary .vat-amount            /* Importo IVA */
 ```
 
 ### CSS Personalizzato
@@ -184,7 +196,22 @@ add_action('woocommerce_single_product_summary', function() {
 1. Controlla che il prodotto abbia varianti configurate correttamente
 2. Verifica che non ci siano script JavaScript in conflitto
 
+### L'IVA non viene visualizzata
+1. Verifica che l'opzione "Mostra calcolo IVA" sia abilitata nel pannello admin
+2. Controlla che il prodotto abbia una classe fiscale configurata in WooCommerce
+3. Assicurati che ci sia una quantità selezionata nel prodotto
+4. Verifica che le imposte siano abilitate in WooCommerce (Impostazioni > Generale)
+5. Controlla che siano configurate le aliquote fiscali in WooCommerce (Impostazioni > Imposte)
+
 ## 🔄 Changelog
+
+### v2.1
+- ✨ **NUOVO:** Calcolo automatico IVA basato su configurazione WooCommerce
+- ✨ Visualizzazione IVA nelle sezioni "Stai Aggiungendo" e "Totale Complessivo"
+- ✨ Supporto per classi fiscali diverse (22%, 10%, 4%, esentasse)
+- ✨ Parametro shortcode `show_vat` per controllo visualizzazione IVA
+- 🐛 Risolti warning PHP nella pagina di amministrazione
+- 🔧 Migliorato calcolo IVA per prodotti con varianti
 
 ### v2.0
 - ✨ Aggiunto pannello di amministrazione completo
