@@ -1,60 +1,84 @@
 # WooCommerce Cart Product Summary Pro
+## Documentazione Ufficiale
+
+**Versione:** 2.3
+**Autore:** Rocco Fusella
+**Website:** roccofusella.it
+**Data:** 29 Settembre 2025
+
+---
+
+## Introduzione
 
 Un plugin WordPress avanzato che mostra un riepilogo in tempo reale del prodotto corrente nel carrello WooCommerce, con pannello di amministrazione e shortcode altamente personalizzabile.
 
-![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue.svg)
-![WooCommerce](https://img.shields.io/badge/WooCommerce-3.0%2B-purple.svg)
-![PHP](https://img.shields.io/badge/PHP-7.4%2B-green.svg)
-![License](https://img.shields.io/badge/License-GPL%20v2-red.svg)
-
-## ✨ Caratteristiche
-
-- 📊 **Riepilogo in tempo reale** - Si aggiorna istantaneamente quando modifichi quantità o varianti
-- 🎨 **Pannello di amministrazione** - Interfaccia user-friendly per personalizzazioni globali
-- 🏷️ **Shortcode flessibile** - Parametri per controllo granulare di ogni istanza
-- 🎯 **Sezioni modulari** - Mostra solo le sezioni che ti servono (Carrello, Selezione, Totale)
-- 💰 **Calcolo IVA automatico** - Visualizza l'IVA in base alla configurazione fiscale WooCommerce
-- 🛒 **Bottone "Aggiungi al carrello" integrato** - Con campo quantità personalizzabile e colori configurabili
-- 🔧 **Supporto opzioni YITH WAPO** - Gestisce automaticamente checkbox e opzioni aggiuntive
-- 🌈 **Personalizzazione completa** - Colori, tipografia e layout configurabili
-- 📱 **Design responsive** - Perfetto su desktop, tablet e mobile
-- 🔄 **Supporto varianti** - Compatibile con prodotti semplici e variabili
-- ⚡ **Performance ottimizzate** - Codice leggero e veloce
-
-## 📋 Requisiti
-
+**Requisiti:**
 - WordPress 5.0+
 - WooCommerce 3.0+
 - PHP 7.4+
 
-## 🎯 Plugin Compatibili (Opzionali)
+---
+
+## Caratteristiche Principali
+
+### ✨ Funzionalità Core
+- **Riepilogo in tempo reale** - Si aggiorna istantaneamente quando modifichi quantità o varianti
+- **Pannello di amministrazione** - Interfaccia user-friendly per personalizzazioni globali
+- **Shortcode flessibile** - Parametri per controllo granulare di ogni istanza
+- **Sezioni modulari** - Mostra solo le sezioni che ti servono (Carrello, Selezione, Totale)
+
+### 💰 Gestione Prezzi e IVA
+- **Calcolo IVA automatico** - Visualizza l'IVA in base alla configurazione fiscale WooCommerce
+- **Supporto opzioni YITH WAPO** - Gestisce automaticamente checkbox e opzioni aggiuntive
+- **Breakdown prezzi** - Mostra dettaglio prezzo base + opzioni aggiuntive
+
+### 🛒 Bottone Integrato "Aggiungi al Carrello"
+- **Campo quantità personalizzabile** - Con input numerico indipendente
+- **Colori configurabili** - Personalizza colore bottone e campo quantità
+- **Layout responsive** - Ottimizzato per tutti i dispositivi
+
+### 🎨 Personalizzazione Visiva
+- **Personalizzazione completa** - Colori, tipografia e layout configurabili
+- **Design responsive** - Perfetto su desktop, tablet e mobile
+- **CSS customizzabile** - Classi CSS ben strutturate per personalizzazioni avanzate
+
+### 🔄 Compatibilità
+- **Supporto varianti** - Compatibile con prodotti semplici e variabili
+- **Performance ottimizzate** - Codice leggero e veloce
+- **Compatibilità temi** - Funziona con tutti i temi WooCommerce
+
+---
+
+## Plugin Compatibili (Opzionali)
 
 - **YITH WooCommerce Product Add-Ons (WAPO)** - Per gestione automatica opzioni aggiuntive con prezzi
 - **Qualsiasi plugin per varianti WooCommerce** - Completamente compatibile
 
-## 🚀 Installazione
+---
+
+## Installazione
 
 ### Metodo 1: Upload manuale
-
 1. Scarica il plugin dal repository
 2. Carica la cartella `wc-cart-summary-pro` in `/wp-content/plugins/`
 3. Attiva il plugin dal pannello WordPress
 4. Vai in `Impostazioni > Cart Summary` per configurare
 
 ### Metodo 2: Via WordPress Admin
-
 1. Vai in `Plugin > Aggiungi nuovo`
 2. Carica il file `.zip` del plugin
 3. Attiva il plugin
 4. Configura dalle impostazioni
 
-## ⚙️ Configurazione
+---
+
+## Configurazione
 
 ### Pannello di Amministrazione
 
 Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 
-#### Comportamento
+#### Opzioni Comportamento
 - **Mostra prezzo quando quantità è zero** - Visualizza il prezzo anche con qty=0
 - **Auto-aggiunta alle pagine prodotto** - Inserisce automaticamente il widget in tutte le pagine prodotto
 - **Mostra calcolo IVA** - Visualizza l'IVA calcolata automaticamente dal prodotto WooCommerce
@@ -65,7 +89,9 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 - **Bottone Aggiungi al carrello** - Colore personalizzabile del bottone e campo quantità
 - **Tipografia** - Colore e dimensione per titoli e testo
 
-## 📝 Utilizzo Shortcode
+---
+
+## Utilizzo Shortcode
 
 ### Shortcode Base
 ```
@@ -90,7 +116,9 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 | `title_size` | numero | - | Dimensione titolo in px |
 | `text_size` | numero | - | Dimensione testo in px |
 
-## 🎯 Esempi di Utilizzo
+---
+
+## Esempi di Utilizzo
 
 ### Esempio 1: Widget Completo
 ```
@@ -109,11 +137,11 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 
 ### Esempio 4: Personalizzazione Completa
 ```
-[cart_product_summary 
-    title="Offerta Speciale" 
-    show_cart="no" 
-    selected_color="#ffeb3b" 
-    title_size="24" 
+[cart_product_summary
+    title="Offerta Speciale"
+    show_cart="no"
+    selected_color="#ffeb3b"
+    title_size="24"
     show_price_zero="yes"]
 ```
 
@@ -153,7 +181,9 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
     text_size="15"]
 ```
 
-## 🎨 Sezioni del Widget
+---
+
+## Sezioni del Widget
 
 ### 🛒 Nel Carrello (show_cart)
 - Quantità già presente nel carrello per questo prodotto
@@ -172,7 +202,9 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 - Valore totale complessivo
 - IVA totale (se abilitata)
 
-## 🔧 Personalizzazione CSS
+---
+
+## Personalizzazione CSS
 
 ### Classi CSS Principali
 
@@ -194,6 +226,7 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 ```
 
 ### CSS Personalizzato
+
 ```css
 /* Esempio: Stile personalizzato per tema scuro */
 .wc-cart-product-summary {
@@ -218,7 +251,9 @@ Accedi alle impostazioni da `Impostazioni > Cart Summary`:
 }
 ```
 
-## 🔌 Integrazione Template
+---
+
+## Integrazione Template
 
 ### Nel file PHP del template
 ```php
@@ -234,7 +269,9 @@ add_action('woocommerce_single_product_summary', function() {
 }, 30);
 ```
 
-## 🐛 Risoluzione Problemi
+---
+
+## Risoluzione Problemi
 
 ### Il widget non si aggiorna
 1. Verifica che jQuery sia caricato
@@ -243,7 +280,7 @@ add_action('woocommerce_single_product_summary', function() {
 
 ### I colori non vengono applicati
 1. Svuota la cache del browser (Ctrl+F5)
-2. Disattiva plugin di cache temporaneamente  
+2. Disattiva plugin di cache temporaneamente
 3. Verifica conflitti con il tema
 
 ### Problemi con le varianti
@@ -275,7 +312,9 @@ add_action('woocommerce_single_product_summary', function() {
 3. Verifica che il tema non nasconda gli elementi prezzo con CSS
 4. Assicurati che WooCommerce visualizzi correttamente il prezzo del prodotto
 
-## 🔄 Changelog
+---
+
+## Changelog
 
 ### v2.3 (Ultima versione)
 - ✨ **NUOVO:** Bottone "Aggiungi al Carrello" integrato nel riepilogo
@@ -315,18 +354,24 @@ add_action('woocommerce_single_product_summary', function() {
 - ✨ Aggiornamento in tempo reale
 - ✨ Supporto prodotti variabili
 
-## 📄 Licenza
+---
+
+## Licenza
 
 Questo plugin è rilasciato sotto licenza GPL v2 o successiva.
 
-## 👨‍💻 Sviluppatore
+---
 
-**Rocco Fusella**  
-- 🌐 Website: [roccofusella.it](https://roccofusella.it)
+## Sviluppatore
+
+**Rocco Fusella**
+- 🌐 Website: roccofusella.it
 - 📧 Email: info@roccofusella.it
-- 💼 LinkedIn: [Rocco Fusella](https://linkedin.com/in/rocco-fusella)
+- 💼 LinkedIn: Rocco Fusella
 
-## 🤝 Contribuire
+---
+
+## Contribuire
 
 I contributi sono benvenuti! Per contribuire:
 
@@ -336,18 +381,22 @@ I contributi sono benvenuti! Per contribuire:
 4. Pusha il branch (`git push origin feature/AmazingFeature`)
 5. Apri una Pull Request
 
-## ⭐ Supporto
+---
+
+## Supporto
 
 Se questo plugin ti è utile, considera di:
 - ⭐ Dare una stella al repository
 - 🐛 Segnalare bug o richiedere nuove funzionalità
 - 📢 Condividere il progetto con altri sviluppatori
 
-## 📞 Supporto Tecnico
+---
+
+## Supporto Tecnico
 
 Per supporto tecnico o richieste personalizzate:
 - 📧 Email: support@roccofusella.it
-- 🐛 Issue GitHub: [Apri un issue](https://github.com/roccofusella/wc-cart-summary-pro/issues)
+- 🐛 Issue GitHub: Apri un issue su GitHub
 
 ---
 

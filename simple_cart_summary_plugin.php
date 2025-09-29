@@ -42,6 +42,8 @@ class WC_Cart_Product_Summary_Pro {
         'show_price_zero' => 'no',        // Mostra prezzo quando quantità è zero
         'auto_add_pages' => 'yes',        // Aggiunge automaticamente il widget a tutte le pagine prodotto
         'show_vat' => 'no',               // Mostra la visualizzazione dell'IVA
+        'show_add_to_cart' => 'no',       // Mostra il bottone "Aggiungi al carrello" nel riepilogo
+        'add_to_cart_color' => '#4caf50', // Colore del bottone "Aggiungi al carrello"
         'cart_bg_color' => '#e3f2fd',     // Colore sfondo sezione "Nel Carrello"
         'cart_border_color' => '#2196f3', // Colore bordo sezione "Nel Carrello"
         'selected_bg_color' => '#fff8e1',  // Colore sfondo sezione "Stai Aggiungendo"
@@ -158,6 +160,25 @@ class WC_Cart_Product_Summary_Pro {
 
         return 0;
     }
+
+    /**
+     * Scurisce un colore esadecimale di una determinata percentuale
+     * @param string $hex Colore esadecimale (es. #ff0000)
+     * @param int $percent Percentuale di scurimento (default 20%)
+     * @return string Colore scurito
+     */
+    private function darker_color($hex, $percent = 20) {
+        $hex = str_replace('#', '', $hex);
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+
+        $r = max(0, $r - ($r * $percent / 100));
+        $g = max(0, $g - ($g * $percent / 100));
+        $b = max(0, $b - ($b * $percent / 100));
+
+        return sprintf("#%02x%02x%02x", $r, $g, $b);
+    }
     
     /**
      * Renderizza la pagina di amministrazione del plugin
@@ -196,6 +217,10 @@ class WC_Cart_Product_Summary_Pro {
                             <label>
                                 <input type="checkbox" name="wc_cart_summary_options[show_vat]" value="yes" <?php checked($options['show_vat'], 'yes'); ?>>
                                 Mostra calcolo IVA
+                            </label><br>
+                            <label>
+                                <input type="checkbox" name="wc_cart_summary_options[show_add_to_cart]" value="yes" <?php checked($options['show_add_to_cart'], 'yes'); ?>>
+                                Mostra bottone "Aggiungi al carrello" nel riepilogo
                             </label>
                         </td>
                     </tr>
@@ -240,6 +265,13 @@ class WC_Cart_Product_Summary_Pro {
                             <input type="number" name="wc_cart_summary_options[text_size]" value="<?php echo esc_attr($options['text_size']); ?>" min="10" max="20"> Dimensione (px)
                         </td>
                     </tr>
+
+                    <tr>
+                        <th scope="row">Bottone Aggiungi al Carrello</th>
+                        <td>
+                            <input type="color" name="wc_cart_summary_options[add_to_cart_color]" value="<?php echo esc_attr($options['add_to_cart_color']); ?>"> Colore bottone
+                        </td>
+                    </tr>
                 </table>
                 
                 <?php submit_button(); ?>
@@ -260,6 +292,8 @@ class WC_Cart_Product_Summary_Pro {
                     <li><code>show_selected</code> - "yes"/"no" mostra sezione "Stai Aggiungendo"</li>
                     <li><code>show_total</code> - "yes"/"no" mostra sezione "Totale Complessivo"</li>
                     <li><code>show_vat</code> - "yes"/"no" mostra calcolo IVA (usa l'aliquota del prodotto)</li>
+                    <li><code>show_add_to_cart</code> - "yes"/"no" mostra bottone "Aggiungi al carrello"</li>
+                    <li><code>add_to_cart_color</code> - Colore del bottone "Aggiungi al carrello"</li>
                     <li><code>cart_color</code> - Colore sezione carrello</li>
                     <li><code>selected_color</code> - Colore sezione selezione</li>
                     <li><code>total_color</code> - Colore sezione totale</li>
@@ -279,6 +313,15 @@ class WC_Cart_Product_Summary_Pro {
 
                 <p><strong>Con visualizzazione IVA automatica:</strong><br>
                 <code>[cart_product_summary show_vat="yes"]</code></p>
+
+                <p><strong>Con bottone Aggiungi al carrello:</strong><br>
+                <code>[cart_product_summary show_add_to_cart="yes"]</code></p>
+
+                <p><strong>Con bottone personalizzato:</strong><br>
+                <code>[cart_product_summary show_add_to_cart="yes" add_to_cart_color="#ff6600"]</code></p>
+
+                <p><strong>Configurazione completa con tutte le opzioni:</strong><br>
+                <code>[cart_product_summary show_vat="yes" show_add_to_cart="yes" add_to_cart_color="#ff6600" title="Il Mio Carrello"]</code></p>
             </div>
         </div>
         <?php
@@ -401,6 +444,46 @@ class WC_Cart_Product_Summary_Pro {
                 .wc-cart-product-summary .summary-row:last-child {
                     border-bottom: none !important;
                 }
+                /* Stili per il container del bottone e quantità */
+                .wc-cart-product-summary .add-to-cart-container {
+                    display: flex !important;
+                    gap: 10px !important;
+                    align-items: center !important;
+                    margin-top: 15px !important;
+                }
+                /* Stili per il campo quantità */
+                .wc-cart-product-summary .cart-quantity-input {
+                    width: 80px !important;
+                    padding: 8px !important;
+                    border: 2px solid <?php echo $this->get_option('add_to_cart_color'); ?> !important;
+                    border-radius: 5px !important;
+                    text-align: center !important;
+                    font-size: 14px !important;
+                    font-weight: bold !important;
+                }
+                /* Stili per il bottone Aggiungi al carrello */
+                .wc-cart-product-summary .add-to-cart-button {
+                    flex: 1 !important;
+                    padding: 12px 20px !important;
+                    background: <?php echo $this->get_option('add_to_cart_color'); ?> !important;
+                    color: white !important;
+                    border: none !important;
+                    border-radius: 8px !important;
+                    font-size: 16px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    cursor: pointer !important;
+                    transition: background-color 0.3s ease !important;
+                }
+                .wc-cart-product-summary .add-to-cart-button:hover {
+                    background: <?php echo $this->darker_color($this->get_option('add_to_cart_color')); ?> !important;
+                    transform: translateY(-1px) !important;
+                }
+                .wc-cart-product-summary .add-to-cart-button:disabled {
+                    background: #ccc !important;
+                    cursor: not-allowed !important;
+                    transform: none !important;
+                }
             </style>
             <?php
         }
@@ -417,12 +500,23 @@ class WC_Cart_Product_Summary_Pro {
             
             wp_add_inline_script('jquery', '
                 jQuery(document).ready(function($) {
-                    
+
                     var cartQuantity = 0;
                     var cartTotal = 0;
                     var currentVariationData = null;
                     var showVat = ' . ($this->get_option('show_vat') === 'yes' ? 'true' : 'false') . ';
                     var productVatRate = 0;
+
+                    // Inizializza il widget con un leggero ritardo per assicurarsi che tutto sia caricato
+                    setTimeout(function() {
+                        console.log("Inizializzazione ritardata del widget riepilogo carrello");
+                        // Carica i dati del carrello
+                        var productId = $(".wc-cart-product-summary").data("product-id");
+                        if (productId) {
+                            getCartQuantity(productId);
+                        }
+                        updateSummary();
+                    }, 1000);
                     
                     function getCartData() {
                         var productId = $(".wc-cart-product-summary").data("product-id");
@@ -476,37 +570,186 @@ class WC_Cart_Product_Summary_Pro {
                     function getCurrentPrice() {
                         var price = 0;
                         var priceText = "";
-                        
-                        if (currentVariationData && currentVariationData.display_price) {
-                            price = parseFloat(currentVariationData.display_price);
-                            
-                            if (currentVariationData.price_html) {
-                                var tempDiv = $("<div>").html(currentVariationData.price_html);
-                                var extractedPrice = tempDiv.find(".amount").last().text() || tempDiv.text();
-                                var cleanPrice = extractedPrice.replace(/[^\\d.,]/g, "").replace(",", ".");
-                                if (cleanPrice) {
-                                    priceText = extractedPrice;
+                        var isSquareMeter = false;
+
+                        // Controllo per calcolo al metro quadro
+                        // Cerca campi di larghezza e altezza con selettori più specifici
+                        var $widthField = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\'], input[id*=\\\'width\\\'], input[id*=\\\'larghezza\\\'], input[id*=\\\'lunghezza\\\'], input[class*=\\\'width\\\'], input[class*=\\\'larghezza\\\'], input[class*=\\\'dimension\\\']");
+                        var $heightField = $("input[name*=\\\'height\\\'], input[name*=\\\'altezza\\\'], input[name*=\\\'Height\\\'], input[name*=\\\'Altezza\\\'], input[id*=\\\'height\\\'], input[id*=\\\'altezza\\\'], input[class*=\\\'height\\\'], input[class*=\\\'altezza\\\'], input[class*=\\\'dimension\\\']:eq(1)");
+
+                        // Controlla anche se esiste un sistema di calcolo dinamico
+                        var $dynamicCalcField = $("input.tmcp-field.tc-is-math, input[data-rules], input[data-formula]");
+                        var hasDynamicCalculation = $dynamicCalcField.length > 0;
+
+                        console.log("Debug campi dimensione:", {
+                            widthFields: $widthField.length,
+                            heightFields: $heightField.length,
+                            dynamicCalcFields: $dynamicCalcField.length,
+                            hasDynamicCalculation: hasDynamicCalculation,
+                            widthFieldNames: $widthField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get(),
+                            heightFieldNames: $heightField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get(),
+                            dynamicFieldNames: $dynamicCalcField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get()
+                        });
+
+                        if (($widthField.length && $heightField.length) || hasDynamicCalculation) {
+                            isSquareMeter = true;
+                            var widthCm = 0;
+                            var heightCm = 0;
+                            var area = 0;
+
+                            if ($widthField.length && $heightField.length) {
+                                // Calcolo tradizionale con campi separati
+                                widthCm = parseFloat($widthField.first().val()) || 0;
+                                heightCm = parseFloat($heightField.first().val()) || 0;
+                                var widthM = widthCm / 100;
+                                var heightM = heightCm / 100;
+                                area = widthM * heightM;
+                                console.log("Calcolo metro quadro tradizionale - Larghezza:", widthCm, "cm, Altezza:", heightCm, "cm, Area:", area, "m²");
+                            } else if (hasDynamicCalculation) {
+                                // Sistema di calcolo dinamico - cerca di stimare l\\\'area o usa 1 m² come placeholder
+                                area = 1; // Default area per prodotti con calcolo dinamico
+                                console.log("Sistema calcolo dinamico rilevato, area placeholder:", area, "m²");
+                            }
+
+                            // Prima verifica se esiste già un prezzo totale calcolato (scenario 1)
+                            // Cerca specificatamente nel container del calcolo dinamico
+                            var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
+                            if ($totalPriceElement.length && $totalPriceElement.text().trim()) {
+                                // Usa il prezzo totale già calcolato dal sistema
+                                var totalPriceText = $totalPriceElement.text().trim();
+                                var totalPriceMatch = totalPriceText.match(/[\\d.,]+/);
+                                if (totalPriceMatch) {
+                                    price = parseFloat(totalPriceMatch[0].replace(",", "."));
+                                    priceText = price.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    }) + " (" + area.toFixed(2) + " m²)";
+                                    console.log("Prezzo totale già calcolato trovato:", price, "per", area.toFixed(2), "m²");
+                                }
+                            } else {
+                                // Scenario 2: Calcola manualmente il prezzo (prezzo base * area)
+                                var basePricePerSqm = 0;
+                                if (currentVariationData && currentVariationData.display_price) {
+                                    basePricePerSqm = parseFloat(currentVariationData.display_price);
+                                } else {
+                                    // Cerca il prezzo base in vari selettori (escludo tc-price per evitare conflitti)
+                                    var priceSelectors = [
+                                        ".summary .price .amount:not(.tc-price .amount)",
+                                        "p.price .amount:not(.tc-price .amount)",
+                                        ".price .amount:not(.tc-price .amount)",
+                                        ".woocommerce-Price-amount:not(.tc-price .amount)",
+                                        ".single-product .price .amount:not(.tc-price .amount)",
+                                        ".product .price .amount:not(.tc-price .amount)"
+                                    ];
+
+                                    for (var i = 0; i < priceSelectors.length; i++) {
+                                        var $priceElement = $(priceSelectors[i]);
+                                        if ($priceElement.length && $priceElement.text().trim()) {
+                                            var priceElementText = $priceElement.text().trim();
+                                            var priceMatch = priceElementText.match(/[\\d.,]+/);
+                                            if (priceMatch) {
+                                                basePricePerSqm = parseFloat(priceMatch[0].replace(",", "."));
+                                                console.log("Prezzo base al m² trovato:", basePricePerSqm);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Calcola il prezzo totale: prezzo per m² * area
+                                if (area > 0 && basePricePerSqm > 0) {
+                                    price = basePricePerSqm * area;
+                                    priceText = price.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    }) + " (" + area.toFixed(2) + " m²)";
+                                    console.log("Prezzo calcolato manualmente:", price, "per", area.toFixed(2), "m²");
+                                } else {
+                                    price = 0;
+                                    priceText = "€0,00 (inserire dimensioni)";
                                 }
                             }
-                            
-                            if (!priceText) {
-                                priceText = price.toLocaleString("it-IT", {
-                                    style: "currency",
-                                    currency: "EUR"
-                                });
-                            }
                         } else {
-                            var $priceElement = $(".woocommerce-variation-price .amount, .price .amount, .woocommerce-Price-amount").first();
-                            if ($priceElement.length) {
-                                priceText = $priceElement.text();
-                                var priceMatch = priceText.match(/[\\d.,]+/);
-                                price = priceMatch ? parseFloat(priceMatch[0].replace(",", ".")) : 0;
+                            // Logica normale per prodotti non al metro quadro
+                            if (currentVariationData && currentVariationData.display_price) {
+                                price = parseFloat(currentVariationData.display_price);
+
+                                if (currentVariationData.price_html) {
+                                    var tempDiv = $("<div>").html(currentVariationData.price_html);
+                                    var extractedPrice = tempDiv.find(".amount").last().text() || tempDiv.text();
+                                    var cleanPrice = extractedPrice.replace(/[^\\d.,]/g, "").replace(",", ".");
+                                    if (cleanPrice) {
+                                        priceText = extractedPrice;
+                                    }
+                                }
+
+                                if (!priceText) {
+                                    priceText = price.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    });
+                                }
+                            } else {
+                                // Cerca il prezzo in vari selettori per prodotti semplici
+                                var priceSelectors = [
+                                    ".price.tc-price .woocommerce-Price-amount.amount", // Prezzo calcolato dinamicamente
+                                    ".summary .price .amount",
+                                    "p.price .amount",
+                                    ".price .amount",
+                                    ".woocommerce-Price-amount",
+                                    ".single-product .price .amount",
+                                    ".product .price .amount"
+                                ];
+
+                                for (var i = 0; i < priceSelectors.length; i++) {
+                                    var $priceElement = $(priceSelectors[i]);
+                                    if ($priceElement.length && $priceElement.text().trim()) {
+                                        priceText = $priceElement.text().trim();
+                                        var priceMatch = priceText.match(/[\\d.,]+/);
+                                        if (priceMatch) {
+                                            price = parseFloat(priceMatch[0].replace(",", "."));
+                                            console.log("Prezzo trovato con selettore:", priceSelectors[i], "Prezzo:", price, "Testo:", priceText);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Se non ha ancora trovato il prezzo, cerca negli attributi
+                                if (price === 0) {
+                                    var productPrice = $("form.cart").data("product_price") || $(".single-product").data("price");
+                                    if (productPrice) {
+                                        price = parseFloat(productPrice);
+                                        priceText = price.toLocaleString("it-IT", {
+                                            style: "currency",
+                                            currency: "EUR"
+                                        });
+                                        console.log("Prezzo trovato negli attributi data:", price);
+                                    }
+                                }
                             }
                         }
-                        
+
+                        // Aggiungi i costi delle opzioni YITH WAPO selezionate
+                        var optionsPrice = 0;
+                        $(".yith-wapo-option-value:checked").each(function() {
+                            var $option = $(this);
+                            var optionPrice = parseFloat($option.data("price")) || 0;
+                            var priceMethod = $option.data("price-method") || "increase";
+
+                            if (priceMethod === "increase") {
+                                optionsPrice += optionPrice;
+                            }
+                        });
+
+                        // Somma prezzo base + opzioni
+                        var totalPrice = price + optionsPrice;
+
                         return {
-                            price: price,
-                            formatted: priceText || price.toLocaleString("it-IT", {
+                            price: totalPrice,
+                            basePrice: price,
+                            optionsPrice: optionsPrice,
+                            isSquareMeter: isSquareMeter,
+                            formatted: isSquareMeter ? priceText : totalPrice.toLocaleString("it-IT", {
                                 style: "currency",
                                 currency: "EUR"
                             })
@@ -516,19 +759,46 @@ class WC_Cart_Product_Summary_Pro {
                     function updateSummary() {
                         var $summary = $(".wc-cart-product-summary");
                         var $quantityInput = $("input.qty, input[name=quantity]").first();
-                        
-                        if ($summary.length && $quantityInput.length) {
-                            var selectedQuantity = parseInt($quantityInput.val()) || 0;
+
+                        if ($summary.length) {
+                            // Per la sezione "Stai Aggiungendo", usa il campo quantità personalizzato se esiste
+                            var $customQuantity = $("#summary-quantity");
+                            var selectedQuantity;
+
+                            if ($customQuantity.length && $summary.data("show-add-to-cart") === "yes") {
+                                // Inizializza il campo con 1 se non impostato
+                                if (!$customQuantity.val() || parseInt($customQuantity.val()) <= 0) {
+                                    $customQuantity.val(1);
+                                }
+                                // Usa la quantità dal campo personalizzato del riepilogo
+                                selectedQuantity = parseInt($customQuantity.val()) || 1;
+                            } else if ($quantityInput.length) {
+                                // Usa la quantità dal campo originale del prodotto
+                                selectedQuantity = parseInt($quantityInput.val()) || 0;
+                            } else {
+                                selectedQuantity = 0;
+                            }
+
                             var showPriceZero = $summary.data("show-price-zero") === "yes";
                             var showCart = $summary.data("show-cart") === "yes";
                             var showSelected = $summary.data("show-selected") === "yes";
                             var showTotal = $summary.data("show-total") === "yes";
                             var currentShowVat = $summary.data("show-vat") === "yes";
+                            var showAddToCart = $summary.data("show-add-to-cart") === "yes";
                             
                             var priceData = getCurrentPrice();
                             var unitPrice = priceData.price;
                             var formattedPrice = priceData.formatted;
-                            
+
+                            console.log("Debug updateSummary:", {
+                                selectedQuantity: selectedQuantity,
+                                unitPrice: unitPrice,
+                                formattedPrice: formattedPrice,
+                                isSquareMeter: priceData.isSquareMeter,
+                                customQuantityExists: $customQuantity.length > 0,
+                                customQuantityValue: $customQuantity.length > 0 ? $customQuantity.val() : "N/A"
+                            });
+
                             if (selectedQuantity === 0 && !showPriceZero) {
                                 unitPrice = 0;
                                 formattedPrice = "€0,00";
@@ -553,6 +823,24 @@ class WC_Cart_Product_Summary_Pro {
                                     currency: "EUR"
                                 }));
                                 $summary.find(".summary-unit-price").text(formattedPrice);
+
+                                // Mostra il dettaglio del prezzo se ci sono opzioni
+                                if (priceData.optionsPrice > 0) {
+                                    var baseFormatted = priceData.basePrice.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    });
+                                    var optionsFormatted = priceData.optionsPrice.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    });
+
+                                    $summary.find(".price-breakdown").html(
+                                        "<small>Prodotto: " + baseFormatted + " + Opzioni: " + optionsFormatted + "</small>"
+                                    ).show();
+                                } else {
+                                    $summary.find(".price-breakdown").hide();
+                                }
 
                                 // Calcola e mostra l\'IVA per la sezione "Stai Aggiungendo" se abilitata
                                 if (currentShowVat) {
@@ -619,6 +907,28 @@ class WC_Cart_Product_Summary_Pro {
                                 $summary.find(".summary-content").hide();
                                 $summary.find(".no-quantity").show();
                             }
+
+                            // Gestione stato del bottone Aggiungi al carrello
+                            if (showAddToCart) {
+                                var $addButton = $("#summary-add-to-cart");
+                                var $customQuantity = $("#summary-quantity");
+                                var customQty = parseInt($customQuantity.val()) || 1;
+
+                                console.log("Debug bottone:", {
+                                    showAddToCart: showAddToCart,
+                                    selectedQuantity: selectedQuantity,
+                                    customQuantity: customQty,
+                                    buttonFound: $addButton.length > 0
+                                });
+
+                                if (selectedQuantity > 0 && customQty > 0) {
+                                    $addButton.prop("disabled", false);
+                                    $addButton.text("🛒 Aggiungi " + customQty + " al Carrello");
+                                } else {
+                                    $addButton.prop("disabled", true);
+                                    $addButton.text("🛒 Aggiungi al Carrello");
+                                }
+                            }
                         }
                     }
                     
@@ -629,6 +939,105 @@ class WC_Cart_Product_Summary_Pro {
                     $(document).on("click", ".quantity .plus, .quantity .minus", function() {
                         setTimeout(updateSummary, 200);
                     });
+
+                    // Event listener per i checkbox delle opzioni YITH WAPO
+                    $(document).on("change", ".yith-wapo-option-value", function() {
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Event listener per il campo quantità personalizzato del riepilogo
+                    $(document).on("input change", "#summary-quantity", function() {
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Event listener potenziati per i campi larghezza e altezza (calcolo al metro quadro)
+                    // Selettori multipli per catturare tutti i possibili campi dimensione
+                    var dimensionSelectors = [
+                        "input[name*=\\\'width\\\']", "input[name*=\\\'larghezza\\\']", "input[name*=\\\'lunghezza\\\']",
+                        "input[name*=\\\'Width\\\']", "input[name*=\\\'Larghezza\\\']", "input[name*=\\\'Lunghezza\\\']",
+                        "input[name*=\\\'height\\\']", "input[name*=\\\'altezza\\\']", "input[name*=\\\'Height\\\']", "input[name*=\\\'Altezza\\\']",
+                        "input[id*=\\\'width\\\']", "input[id*=\\\'larghezza\\\']", "input[id*=\\\'lunghezza\\\']",
+                        "input[id*=\\\'height\\\']", "input[id*=\\\'altezza\\\']",
+                        "input[class*=\\\'width\\\']", "input[class*=\\\'larghezza\\\']",
+                        "input[class*=\\\'height\\\']", "input[class*=\\\'altezza\\\']",
+                        "input[class*=\\\'dimension\\\']", "input[type=\\\'number\\\']",
+                        // Aggiungi selettori specifici per i campi di calcolo dinamico
+                        "input.tmcp-field", "input.tmcp-dynamic", "input.tmcp-textfield",
+                        "input[data-rules]", "input[data-formula]", "input.tc-is-math"
+                    ].join(", ");
+
+                    $(document).on("input change keyup blur paste", dimensionSelectors, function() {
+                        var fieldName = $(this).attr("name") || $(this).attr("id") || $(this).attr("class");
+                        console.log("Cambio dimensioni rilevato:", fieldName, "=", $(this).val());
+                        setTimeout(updateSummary, 50);
+                    });
+
+                    // Event listener specifici per i campi di calcolo dinamico
+                    $(document).on("input change keyup", "input[name*=\\\'tmcp\\\']", function() {
+                        console.log("Campo calcolo dinamico cambiato:", $(this).attr("name"), "=", $(this).val());
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Observer potenziato per monitorare cambiamenti nel prezzo
+                    var priceObserver = new MutationObserver(function(mutations) {
+                        var shouldUpdate = false;
+                        mutations.forEach(function(mutation) {
+                            if (mutation.type === "childList" || mutation.type === "characterData") {
+                                var $target = $(mutation.target);
+                                // Monitora vari elementi prezzo
+                                if ($target.closest(".price").length ||
+                                    $target.closest(".woocommerce-Price-amount").length ||
+                                    $target.hasClass("amount") ||
+                                    $target.hasClass("price") ||
+                                    $target.hasClass("tc-price")) {
+                                    shouldUpdate = true;
+                                    console.log("Cambio prezzo rilevato nell\\\'elemento:", mutation.target.className);
+                                }
+                            }
+                        });
+                        if (shouldUpdate) {
+                            console.log("Aggiornamento riepilogo per cambio prezzo");
+                            setTimeout(updateSummary, 25);
+                        }
+                    });
+
+                    // Osserva cambiamenti in tutti gli elementi prezzo possibili
+                    var priceSelectors = [".price", ".woocommerce-Price-amount", ".amount", ".tc-price", ".tc-price-wrap"];
+                    priceSelectors.forEach(function(selector) {
+                        var elements = document.querySelectorAll(selector);
+                        elements.forEach(function(element) {
+                            priceObserver.observe(element, {
+                                childList: true,
+                                subtree: true,
+                                characterData: true,
+                                attributes: true,
+                                attributeFilter: ["class", "data-price", "data-rules"]
+                            });
+                        });
+                    });
+
+                    // Observer specifico per l\\\'intero container del calcolo dinamico
+                    var dynamicCalcContainers = document.querySelectorAll(".tc-element-container, .tmcp-ul-wrap, .tm-extra-product-options-dynamic");
+                    dynamicCalcContainers.forEach(function(container) {
+                        priceObserver.observe(container, {
+                            childList: true,
+                            subtree: true,
+                            characterData: true,
+                            attributes: true
+                        });
+                    });
+
+                    // Timer aggiuntivo per monitoraggio continuo del prezzo (fallback)
+                    var lastPriceCheck = "";
+                    setInterval(function() {
+                        var currentPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount").text() ||
+                                         $(".price.tc-price .woocommerce-Price-amount.amount").text();
+                        if (currentPrice && currentPrice !== lastPriceCheck) {
+                            console.log("Prezzo cambiato da", lastPriceCheck, "a", currentPrice);
+                            lastPriceCheck = currentPrice;
+                            updateSummary();
+                        }
+                    }, 300);
                     
                     $(".variations_form").on("found_variation", function(event, variation) {
                         currentVariationData = variation;
@@ -648,10 +1057,59 @@ class WC_Cart_Product_Summary_Pro {
                         setTimeout(getCartData, 1000);
                     });
                     
+                    // Gestore click del bottone Aggiungi al carrello
+                    $(document).on("click", "#summary-add-to-cart", function(e) {
+                        e.preventDefault();
+
+                        var $addButton = $(this);
+                        var $customQuantity = $("#summary-quantity");
+                        var quantity = parseInt($customQuantity.val()) || 1;
+
+                        if (quantity <= 0) {
+                            return false;
+                        }
+
+                        // Disabilita temporaneamente il bottone
+                        $addButton.prop("disabled", true).text("Aggiungendo...");
+
+                        // Imposta la quantità nel campo del prodotto originale
+                        var $originalQuantityInput = $("input.qty, input[name=quantity]").first();
+                        if ($originalQuantityInput.length) {
+                            $originalQuantityInput.val(quantity);
+                        }
+
+                        // Simula il click del bottone originale "Aggiungi al carrello"
+                        var $originalButton = $("button[name=add-to-cart], .single_add_to_cart_button").first();
+
+                        if ($originalButton.length) {
+                            $originalButton.trigger("click");
+
+                            // Riabilita il bottone dopo un breve delay
+                            setTimeout(function() {
+                                $addButton.prop("disabled", false).text("🛒 Aggiungi " + quantity + " al Carrello");
+                            }, 2000);
+                        } else {
+                            // Fallback: sottomette il form del prodotto
+                            var $form = $("form.cart, .variations_form").first();
+                            if ($form.length) {
+                                $form.submit();
+                            }
+
+                            setTimeout(function() {
+                                $addButton.prop("disabled", false).text("🛒 Aggiungi " + quantity + " al Carrello");
+                            }, 2000);
+                        }
+                    });
+
                     getCartData();
                     var productId = $(".wc-cart-product-summary").data("product-id");
                     getProductVatRate(productId);
                     setTimeout(updateSummary, 1000);
+
+                    // Trigger aggiuntivo per prodotti semplici - aggiorna dopo il caricamento completo
+                    $(window).on("load", function() {
+                        setTimeout(updateSummary, 500);
+                    });
                 });
             ');
         }
@@ -682,9 +1140,11 @@ class WC_Cart_Product_Summary_Pro {
             'show_selected' => 'yes',      // Mostra sezione "Stai Aggiungendo"
             'show_total' => 'yes',         // Mostra sezione "Totale Complessivo"
             'show_vat' => $this->get_option('show_vat'),           // Mostra calcolo IVA
+            'show_add_to_cart' => $this->get_option('show_add_to_cart'), // Mostra bottone Aggiungi al carrello
             'cart_color' => '',            // Colore personalizzato sezione carrello
             'selected_color' => '',        // Colore personalizzato sezione selezione
             'total_color' => '',           // Colore personalizzato sezione totale
+            'add_to_cart_color' => '',     // Colore personalizzato bottone Aggiungi al carrello
             'title_size' => '',            // Dimensione personalizzata titolo
             'text_size' => ''              // Dimensione personalizzata testo
         ), $atts);
@@ -716,6 +1176,12 @@ class WC_Cart_Product_Summary_Pro {
         if (!empty($atts['text_size'])) {
             $inline_style .= '.summary-label, .summary-value { font-size: ' . intval($atts['text_size']) . 'px !important; }';
         }
+        // Colore personalizzato del bottone
+        if (!empty($atts['add_to_cart_color'])) {
+            $inline_style .= '.add-to-cart-button { background: ' . esc_attr($atts['add_to_cart_color']) . ' !important; }';
+            $inline_style .= '.cart-quantity-input { border-color: ' . esc_attr($atts['add_to_cart_color']) . ' !important; }';
+            $inline_style .= '.add-to-cart-button:hover { background: ' . $this->darker_color($atts['add_to_cart_color']) . ' !important; }';
+        }
         
         // Inizia il buffer di output per catturare l'HTML generato
         ob_start();
@@ -732,7 +1198,8 @@ class WC_Cart_Product_Summary_Pro {
              data-show-cart="<?php echo esc_attr($atts['show_cart']); ?>"
              data-show-selected="<?php echo esc_attr($atts['show_selected']); ?>"
              data-show-total="<?php echo esc_attr($atts['show_total']); ?>"
-             data-show-vat="<?php echo esc_attr($atts['show_vat']); ?>">
+             data-show-vat="<?php echo esc_attr($atts['show_vat']); ?>"
+             data-show-add-to-cart="<?php echo esc_attr($atts['show_add_to_cart']); ?>">
             
             <!-- Titolo del widget -->
             <h4 class="summary-title"><?php echo esc_html($atts['title']); ?></h4>
@@ -772,10 +1239,21 @@ class WC_Cart_Product_Summary_Pro {
                         <span class="summary-label">Subtotale:</span>
                         <span class="summary-value selected-total">€0,00</span>
                     </div>
+                    <div class="price-breakdown" style="display: none; margin-top: 5px; font-style: italic; color: #666;"></div>
                     <!-- Visualizzazione IVA nella sezione "Stai Aggiungendo" se abilitata -->
                     <?php if ($atts['show_vat'] === 'yes'): ?>
                     <div class="vat-info">
                         di cui IVA <span class="vat-amount-selected">€0,00</span>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Bottone Aggiungi al carrello se abilitato -->
+                    <?php if ($atts['show_add_to_cart'] === 'yes'): ?>
+                    <div class="add-to-cart-container">
+                        <input type="number" class="cart-quantity-input" id="summary-quantity" min="1" value="1" title="Quantità">
+                        <button type="button" class="add-to-cart-button" id="summary-add-to-cart" disabled>
+                            🛒 Aggiungi al Carrello
+                        </button>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -882,7 +1360,7 @@ class WC_Cart_Product_Summary_Pro {
             'debug' => array(
                 'product_id' => $product_id,
                 'variation_id' => $variation_id,
-                'tax_class' => $product ? $product->get_tax_class() : 'N/A'
+                'tax_class' => $product ? $product->get_tax_class() : "N/A"
             )
         ));
     }

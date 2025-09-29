@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cp:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebFetch(domain:graphicart3d.it)",
+      "Bash(php:*)"
     ],
     "deny": []
   }
