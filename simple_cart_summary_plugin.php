@@ -662,11 +662,11 @@ class WC_Cart_Product_Summary_Pro {
                                     priceText = price.toLocaleString("it-IT", {
                                         style: "currency",
                                         currency: "EUR"
-                                    }) + " (" + area.toFixed(2) + " m²)";
+                                    });
                                     console.log("Prezzo calcolato manualmente:", price, "per", area.toFixed(2), "m²");
                                 } else {
                                     price = 0;
-                                    priceText = "€0,00 (inserire dimensioni)";
+                                    priceText = "€0,00";
                                 }
                             }
                         } else {
@@ -1122,11 +1122,16 @@ class WC_Cart_Product_Summary_Pro {
      * @return string HTML del widget
      */
     public function display_cart_summary($atts = array()) {
+        // Verifica se l'utente è loggato
+        if (!is_user_logged_in()) {
+            return '';
+        }
+
         // Mostra il widget solo nelle pagine prodotto
         if (!is_product()) {
             return '';
         }
-        
+
         global $product;
         if (!$product) {
             return '';
