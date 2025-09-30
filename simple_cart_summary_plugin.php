@@ -132,6 +132,48 @@ class WC_Cart_Product_Summary_Pro {
     }
 
     /**
+     * Ottiene la quantità minima impostata dal plugin Min Max Step
+     * @param WC_Product $product Prodotto WooCommerce
+     * @return int Quantità minima (default 1)
+     */
+    public function get_min_quantity($product) {
+        if (!$product) {
+            return 1;
+        }
+
+        $min_qty = get_post_meta($product->get_id(), '_alg_wc_pq_min_qty', true);
+        return !empty($min_qty) && $min_qty > 0 ? intval($min_qty) : 1;
+    }
+
+    /**
+     * Ottiene la quantità massima impostata dal plugin Min Max Step
+     * @param WC_Product $product Prodotto WooCommerce
+     * @return int Quantità massima (default 0 = illimitato)
+     */
+    public function get_max_quantity($product) {
+        if (!$product) {
+            return 0;
+        }
+
+        $max_qty = get_post_meta($product->get_id(), '_alg_wc_pq_max_qty', true);
+        return !empty($max_qty) && $max_qty > 0 ? intval($max_qty) : 0;
+    }
+
+    /**
+     * Ottiene lo step di quantità impostato dal plugin Min Max Step
+     * @param WC_Product $product Prodotto WooCommerce
+     * @return int Step di quantità (default 1)
+     */
+    public function get_step_quantity($product) {
+        if (!$product) {
+            return 1;
+        }
+
+        $step_qty = get_post_meta($product->get_id(), '_alg_wc_pq_step_qty', true);
+        return !empty($step_qty) && $step_qty > 0 ? intval($step_qty) : 1;
+    }
+
+    /**
      * Ottiene l'aliquota IVA del prodotto dalla sua classe fiscale WooCommerce
      * @param WC_Product $product Prodotto WooCommerce
      * @return float Aliquota IVA in percentuale
@@ -451,6 +493,12 @@ class WC_Cart_Product_Summary_Pro {
                     align-items: center !important;
                     margin-top: 15px !important;
                 }
+                /* Container per i controlli quantità */
+                .wc-cart-product-summary .quantity-controls {
+                    display: flex !important;
+                    align-items: center !important;
+                    gap: 5px !important;
+                }
                 /* Stili per il campo quantità */
                 .wc-cart-product-summary .cart-quantity-input {
                     width: 80px !important;
@@ -460,6 +508,37 @@ class WC_Cart_Product_Summary_Pro {
                     text-align: center !important;
                     font-size: 14px !important;
                     font-weight: bold !important;
+                }
+                /* Pulsanti + e - */
+                .wc-cart-product-summary .qty-btn {
+                    width: 35px !important;
+                    height: 35px !important;
+                    padding: 0 !important;
+                    background: <?php echo $this->get_option('add_to_cart_color'); ?> !important;
+                    color: white !important;
+                    border: none !important;
+                    border-radius: 5px !important;
+                    font-size: 18px !important;
+                    font-weight: bold !important;
+                    cursor: pointer !important;
+                    transition: background-color 0.3s ease !important;
+                    line-height: 1 !important;
+                }
+                .wc-cart-product-summary .qty-btn:hover {
+                    background: <?php echo $this->darker_color($this->get_option('add_to_cart_color')); ?> !important;
+                }
+                .wc-cart-product-summary .qty-btn:disabled {
+                    background: #ccc !important;
+                    cursor: not-allowed !important;
+                }
+                /* Nascondi le freccette native del browser per il campo quantità */
+                .wc-cart-product-summary .cart-quantity-input::-webkit-outer-spin-button,
+                .wc-cart-product-summary .cart-quantity-input::-webkit-inner-spin-button {
+                    -webkit-appearance: none !important;
+                    margin: 0 !important;
+                }
+                .wc-cart-product-summary .cart-quantity-input[type=number] {
+                    -moz-appearance: textfield !important;
                 }
                 /* Stili per il bottone Aggiungi al carrello */
                 .wc-cart-product-summary .add-to-cart-button {
@@ -497,7 +576,7 @@ class WC_Cart_Product_Summary_Pro {
         // Carica script solo nelle pagine prodotto
         if (is_product()) {
             wp_enqueue_script('jquery');
-            
+
             wp_add_inline_script('jquery', '
                 jQuery(document).ready(function($) {
 
@@ -506,15 +585,43 @@ class WC_Cart_Product_Summary_Pro {
                     var currentVariationData = null;
                     var showVat = ' . ($this->get_option('show_vat') === 'yes' ? 'true' : 'false') . ';
                     var productVatRate = 0;
+                    var minQuantity = 1;
+                    var maxQuantity = 0;
+                    var stepQuantity = 1;
+
+                    // Funzione per leggere i limiti dal campo quantità originale
+                    function readQuantityLimits() {
+                        var $originalQty = $("input.qty, input[name=quantity]").first();
+                        if ($originalQty.length) {
+                            var min = parseInt($originalQty.attr("min")) || 1;
+                            var max = parseInt($originalQty.attr("max")) || 0;
+                            var step = parseInt($originalQty.attr("step")) || 1;
+
+                            minQuantity = min;
+                            maxQuantity = max;
+                            stepQuantity = step;
+
+                            console.log("Limiti quantità letti dal campo:", {
+                                min: minQuantity,
+                                max: maxQuantity,
+                                step: stepQuantity
+                            });
+
+                            // Nascondi il campo quantità originale
+                            $originalQty.closest(".quantity").hide();
+                        }
+                    }
 
                     // Inizializza il widget con un leggero ritardo per assicurarsi che tutto sia caricato
                     setTimeout(function() {
                         console.log("Inizializzazione ritardata del widget riepilogo carrello");
+
+                        // Leggi i limiti dal campo quantità esistente
+                        readQuantityLimits();
+
                         // Carica i dati del carrello
-                        var productId = $(".wc-cart-product-summary").data("product-id");
-                        if (productId) {
-                            getCartQuantity(productId);
-                        }
+                        getCartData();
+
                         updateSummary();
                     }, 1000);
                     
@@ -623,7 +730,7 @@ class WC_Cart_Product_Summary_Pro {
                                     priceText = price.toLocaleString("it-IT", {
                                         style: "currency",
                                         currency: "EUR"
-                                    }) + " (" + area.toFixed(2) + " m²)";
+                                    });
                                     console.log("Prezzo totale già calcolato trovato:", price, "per", area.toFixed(2), "m²");
                                 }
                             } else {
@@ -766,12 +873,12 @@ class WC_Cart_Product_Summary_Pro {
                             var selectedQuantity;
 
                             if ($customQuantity.length && $summary.data("show-add-to-cart") === "yes") {
-                                // Inizializza il campo con 1 se non impostato
-                                if (!$customQuantity.val() || parseInt($customQuantity.val()) <= 0) {
-                                    $customQuantity.val(1);
+                                // Inizializza il campo con la quantità minima se non impostato
+                                if (!$customQuantity.val() || parseInt($customQuantity.val()) < minQuantity) {
+                                    $customQuantity.val(minQuantity);
                                 }
                                 // Usa la quantità dal campo personalizzato del riepilogo
-                                selectedQuantity = parseInt($customQuantity.val()) || 1;
+                                selectedQuantity = parseInt($customQuantity.val()) || minQuantity;
                             } else if ($quantityInput.length) {
                                 // Usa la quantità dal campo originale del prodotto
                                 selectedQuantity = parseInt($quantityInput.val()) || 0;
@@ -928,6 +1035,11 @@ class WC_Cart_Product_Summary_Pro {
                                     $addButton.prop("disabled", true);
                                     $addButton.text("🛒 Aggiungi al Carrello");
                                 }
+
+                                // Aggiorna lo stato dei pulsanti +/- se esistono
+                                if (typeof updateQuantityButtons === "function") {
+                                    updateQuantityButtons();
+                                }
                             }
                         }
                     }
@@ -945,10 +1057,129 @@ class WC_Cart_Product_Summary_Pro {
                         setTimeout(updateSummary, 100);
                     });
 
+                    // Funzione per validare e correggere la quantità
+                    function validateQuantity($input) {
+                        var value = parseInt($input.val()) || minQuantity;
+                        var originalValue = value;
+
+                        // Valida il valore contro i limiti min/max/step
+                        if (value < minQuantity) {
+                            value = minQuantity;
+                        } else if (maxQuantity > 0 && value > maxQuantity) {
+                            value = maxQuantity;
+                        } else {
+                            // Calcola il valore valido più vicino in base allo step
+                            // I valori validi sono: min, min+step, min+2*step, min+3*step, etc.
+                            var diff = value - minQuantity;
+                            var remainder = diff % stepQuantity;
+
+                            if (remainder !== 0) {
+                                // Arrotonda al multiplo di step più vicino
+                                var stepsFromMin = Math.round(diff / stepQuantity);
+                                value = minQuantity + (stepsFromMin * stepQuantity);
+
+                                // Assicurati che rimanga nei limiti
+                                if (value < minQuantity) value = minQuantity;
+                                if (maxQuantity > 0 && value > maxQuantity) {
+                                    value = minQuantity + (Math.floor((maxQuantity - minQuantity) / stepQuantity) * stepQuantity);
+                                }
+                            }
+                        }
+
+                        // Aggiorna il campo solo se il valore è cambiato
+                        if (value !== originalValue) {
+                            $input.val(value);
+                        }
+
+                        return value;
+                    }
+
                     // Event listener per il campo quantità personalizzato del riepilogo
-                    $(document).on("input change", "#summary-quantity", function() {
+                    $(document).on("input change blur", "#summary-quantity", function() {
+                        var $input = $(this);
+                        validateQuantity($input);
                         setTimeout(updateSummary, 100);
                     });
+
+                    // Gestione tasti freccia su/giù per rispettare gli step
+                    $(document).on("keydown", "#summary-quantity", function(e) {
+                        var $input = $(this);
+                        var currentValue = parseInt($input.val()) || minQuantity;
+                        var newValue = currentValue;
+
+                        // Freccia su (codice 38)
+                        if (e.keyCode === 38) {
+                            e.preventDefault();
+                            newValue = currentValue + stepQuantity;
+                            if (maxQuantity > 0 && newValue > maxQuantity) {
+                                newValue = maxQuantity;
+                            }
+                            $input.val(newValue);
+                            validateQuantity($input);
+                            setTimeout(updateSummary, 100);
+                        }
+                        // Freccia giù (codice 40)
+                        else if (e.keyCode === 40) {
+                            e.preventDefault();
+                            newValue = currentValue - stepQuantity;
+                            if (newValue < minQuantity) {
+                                newValue = minQuantity;
+                            }
+                            $input.val(newValue);
+                            validateQuantity($input);
+                            setTimeout(updateSummary, 100);
+                        }
+                    });
+
+                    // Event handler per il pulsante + (incrementa quantità)
+                    $(document).on("click", "#qty-plus", function() {
+                        var $input = $("#summary-quantity");
+                        var currentValue = parseInt($input.val()) || minQuantity;
+                        var newValue = currentValue + stepQuantity;
+
+                        if (maxQuantity > 0 && newValue > maxQuantity) {
+                            newValue = maxQuantity;
+                        }
+
+                        $input.val(newValue);
+                        validateQuantity($input);
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Event handler per il pulsante - (decrementa quantità)
+                    $(document).on("click", "#qty-minus", function() {
+                        var $input = $("#summary-quantity");
+                        var currentValue = parseInt($input.val()) || minQuantity;
+                        var newValue = currentValue - stepQuantity;
+
+                        if (newValue < minQuantity) {
+                            newValue = minQuantity;
+                        }
+
+                        $input.val(newValue);
+                        validateQuantity($input);
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Aggiorna lo stato dei pulsanti +/- in base ai limiti
+                    function updateQuantityButtons() {
+                        var $input = $("#summary-quantity");
+                        var currentValue = parseInt($input.val()) || minQuantity;
+
+                        // Disabilita il pulsante - se siamo al minimo
+                        if (currentValue <= minQuantity) {
+                            $("#qty-minus").prop("disabled", true);
+                        } else {
+                            $("#qty-minus").prop("disabled", false);
+                        }
+
+                        // Disabilita il pulsante + se siamo al massimo
+                        if (maxQuantity > 0 && currentValue >= maxQuantity) {
+                            $("#qty-plus").prop("disabled", true);
+                        } else {
+                            $("#qty-plus").prop("disabled", false);
+                        }
+                    }
 
                     // Event listener potenziati per i campi larghezza e altezza (calcolo al metro quadro)
                     // Selettori multipli per catturare tutti i possibili campi dimensione
@@ -1253,13 +1484,46 @@ class WC_Cart_Product_Summary_Pro {
                     <?php endif; ?>
 
                     <!-- Bottone Aggiungi al carrello se abilitato -->
-                    <?php if ($atts['show_add_to_cart'] === 'yes'): ?>
+                    <?php if ($atts['show_add_to_cart'] === 'yes'):
+                        $min_qty = $this->get_min_quantity($product);
+                        $max_qty = $this->get_max_quantity($product);
+                        $step_qty = $this->get_step_quantity($product);
+                    ?>
                     <div class="add-to-cart-container">
-                        <input type="number" class="cart-quantity-input" id="summary-quantity" min="1" value="1" title="Quantità">
+                        <div class="quantity-controls">
+                            <button type="button" class="qty-btn qty-minus" id="qty-minus">−</button>
+                            <input type="number"
+                                   class="cart-quantity-input"
+                                   id="summary-quantity"
+                                   min="<?php echo esc_attr($min_qty); ?>"
+                                   <?php if ($max_qty > 0): ?>max="<?php echo esc_attr($max_qty); ?>"<?php endif; ?>
+                                   step="<?php echo esc_attr($step_qty); ?>"
+                                   value="<?php echo esc_attr($min_qty); ?>"
+                                   title="Quantità">
+                            <button type="button" class="qty-btn qty-plus" id="qty-plus">+</button>
+                        </div>
                         <button type="button" class="add-to-cart-button" id="summary-add-to-cart" disabled>
                             🛒 Aggiungi al Carrello
                         </button>
                     </div>
+                    <?php
+                    // Mostra info sui limiti di quantità se esistono
+                    $qty_info = array();
+                    if ($min_qty > 1) {
+                        $qty_info[] = 'Min: ' . $min_qty;
+                    }
+                    if ($max_qty > 0) {
+                        $qty_info[] = 'Max: ' . $max_qty;
+                    }
+                    if ($step_qty > 1) {
+                        $qty_info[] = 'Step: ' . $step_qty;
+                    }
+                    if (!empty($qty_info)):
+                    ?>
+                    <div style="font-size: 12px; color: #666; font-style: italic; margin-top: 5px;">
+                        <?php echo esc_html(implode(' | ', $qty_info)); ?>
+                    </div>
+                    <?php endif; ?>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
