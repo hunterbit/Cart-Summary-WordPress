@@ -601,12 +601,6 @@ class WC_Cart_Product_Summary_Pro {
                             maxQuantity = max;
                             stepQuantity = step;
 
-                            console.log("Limiti quantità letti dal campo:", {
-                                min: minQuantity,
-                                max: maxQuantity,
-                                step: stepQuantity
-                            });
-
                             // Nascondi il campo quantità originale
                             $originalQty.closest(".quantity").hide();
                         }
@@ -614,10 +608,11 @@ class WC_Cart_Product_Summary_Pro {
 
                     // Inizializza il widget con un leggero ritardo per assicurarsi che tutto sia caricato
                     setTimeout(function() {
-                        console.log("Inizializzazione ritardata del widget riepilogo carrello");
-
                         // Leggi i limiti dal campo quantità esistente
                         readQuantityLimits();
+
+                        // Nascondi il prezzo dinamico originale
+                        hideDynamicPrice();
 
                         // Carica i dati del carrello
                         getCartData();
@@ -679,6 +674,47 @@ class WC_Cart_Product_Summary_Pro {
                         var priceText = "";
                         var isSquareMeter = false;
 
+                        // PRIORITÀ 1: Cerca SEMPRE prima il prezzo calcolato dinamicamente
+                        // Questo è il prezzo mostrato da Extra Product Options o altri plugin di calcolo
+                        var $dynamicPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
+
+                        if ($dynamicPrice.length > 0 && $dynamicPrice.first().text().trim()) {
+                            var dynamicPriceText = $dynamicPrice.first().text().trim();
+                            // Estrai solo i numeri dal testo (esempio: "29,51 €" -> "29.51")
+                            var dynamicPriceMatch = dynamicPriceText.match(/([\\d.,]+)/);
+
+                            if (dynamicPriceMatch) {
+                                price = parseFloat(dynamicPriceMatch[1].replace(",", "."));
+                                priceText = price.toLocaleString("it-IT", {
+                                    style: "currency",
+                                    currency: "EUR"
+                                });
+
+                                // Se abbiamo trovato un prezzo dinamico, saltiamo tutto il resto
+                                // e andiamo direttamente alla sezione opzioni YITH
+                                var optionsPrice = 0;
+                                $(".yith-wapo-option-value:checked").each(function() {
+                                    var $option = $(this);
+                                    var optionPrice = parseFloat($option.data("price")) || 0;
+                                    var priceMethod = $option.data("price-method") || "increase";
+
+                                    if (priceMethod === "increase") {
+                                        optionsPrice += optionPrice;
+                                    }
+                                });
+
+                                var totalPrice = price + optionsPrice;
+
+                                return {
+                                    price: totalPrice,
+                                    basePrice: price,
+                                    optionsPrice: optionsPrice,
+                                    isSquareMeter: false,
+                                    formatted: priceText
+                                };
+                            }
+                        }
+
                         // Controllo per calcolo al metro quadro
                         // Cerca campi di larghezza e altezza con selettori più specifici
                         var $widthField = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\'], input[id*=\\\'width\\\'], input[id*=\\\'larghezza\\\'], input[id*=\\\'lunghezza\\\'], input[class*=\\\'width\\\'], input[class*=\\\'larghezza\\\'], input[class*=\\\'dimension\\\']");
@@ -687,16 +723,6 @@ class WC_Cart_Product_Summary_Pro {
                         // Controlla anche se esiste un sistema di calcolo dinamico
                         var $dynamicCalcField = $("input.tmcp-field.tc-is-math, input[data-rules], input[data-formula]");
                         var hasDynamicCalculation = $dynamicCalcField.length > 0;
-
-                        console.log("Debug campi dimensione:", {
-                            widthFields: $widthField.length,
-                            heightFields: $heightField.length,
-                            dynamicCalcFields: $dynamicCalcField.length,
-                            hasDynamicCalculation: hasDynamicCalculation,
-                            widthFieldNames: $widthField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get(),
-                            heightFieldNames: $heightField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get(),
-                            dynamicFieldNames: $dynamicCalcField.map(function(){ return $(this).attr("name") || $(this).attr("id"); }).get()
-                        });
 
                         if (($widthField.length && $heightField.length) || hasDynamicCalculation) {
                             isSquareMeter = true;
@@ -711,29 +737,30 @@ class WC_Cart_Product_Summary_Pro {
                                 var widthM = widthCm / 100;
                                 var heightM = heightCm / 100;
                                 area = widthM * heightM;
-                                console.log("Calcolo metro quadro tradizionale - Larghezza:", widthCm, "cm, Altezza:", heightCm, "cm, Area:", area, "m²");
                             } else if (hasDynamicCalculation) {
-                                // Sistema di calcolo dinamico - cerca di stimare l\\\'area o usa 1 m² come placeholder
-                                area = 1; // Default area per prodotti con calcolo dinamico
-                                console.log("Sistema calcolo dinamico rilevato, area placeholder:", area, "m²");
+                                // Sistema di calcolo dinamico - NON trattiamolo più come metro quadro
+                                // Saltiamo direttamente alla logica normale del prodotto
+                                isSquareMeter = false; // Forza la modalità normale
                             }
 
-                            // Prima verifica se esiste già un prezzo totale calcolato (scenario 1)
-                            // Cerca specificatamente nel container del calcolo dinamico
-                            var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
-                            if ($totalPriceElement.length && $totalPriceElement.text().trim()) {
-                                // Usa il prezzo totale già calcolato dal sistema
-                                var totalPriceText = $totalPriceElement.text().trim();
-                                var totalPriceMatch = totalPriceText.match(/[\\d.,]+/);
-                                if (totalPriceMatch) {
-                                    price = parseFloat(totalPriceMatch[0].replace(",", "."));
-                                    priceText = price.toLocaleString("it-IT", {
-                                        style: "currency",
-                                        currency: "EUR"
-                                    });
-                                    console.log("Prezzo totale già calcolato trovato:", price, "per", area.toFixed(2), "m²");
-                                }
-                            } else {
+                            // Solo se area > 0 procedi con la logica metro quadro
+                            if (isSquareMeter && area > 0) {
+                                // Prima verifica se esiste già un prezzo totale calcolato (scenario 1)
+                                // Cerca specificatamente nel container del calcolo dinamico
+                                var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
+
+                                if ($totalPriceElement.length && $totalPriceElement.text().trim()) {
+                                    // Usa il prezzo totale già calcolato dal sistema
+                                    var totalPriceText = $totalPriceElement.text().trim();
+                                    var totalPriceMatch = totalPriceText.match(/[\\d.,]+/);
+                                    if (totalPriceMatch) {
+                                        price = parseFloat(totalPriceMatch[0].replace(",", "."));
+                                        priceText = price.toLocaleString("it-IT", {
+                                            style: "currency",
+                                            currency: "EUR"
+                                        });
+                                    }
+                                } else {
                                 // Scenario 2: Calcola manualmente il prezzo (prezzo base * area)
                                 var basePricePerSqm = 0;
                                 if (currentVariationData && currentVariationData.display_price) {
@@ -756,7 +783,6 @@ class WC_Cart_Product_Summary_Pro {
                                             var priceMatch = priceElementText.match(/[\\d.,]+/);
                                             if (priceMatch) {
                                                 basePricePerSqm = parseFloat(priceMatch[0].replace(",", "."));
-                                                console.log("Prezzo base al m² trovato:", basePricePerSqm);
                                                 break;
                                             }
                                         }
@@ -770,13 +796,16 @@ class WC_Cart_Product_Summary_Pro {
                                         style: "currency",
                                         currency: "EUR"
                                     });
-                                    console.log("Prezzo calcolato manualmente:", price, "per", area.toFixed(2), "m²");
                                 } else {
                                     price = 0;
                                     priceText = "€0,00";
                                 }
+                                }
                             }
-                        } else {
+                        }
+
+                        // Se isSquareMeter è false O non abbiamo trovato prezzo, usa la logica normale
+                        if (!isSquareMeter || price === 0) {
                             // Logica normale per prodotti non al metro quadro
                             if (currentVariationData && currentVariationData.display_price) {
                                 price = parseFloat(currentVariationData.display_price);
@@ -810,12 +839,12 @@ class WC_Cart_Product_Summary_Pro {
 
                                 for (var i = 0; i < priceSelectors.length; i++) {
                                     var $priceElement = $(priceSelectors[i]);
+
                                     if ($priceElement.length && $priceElement.text().trim()) {
                                         priceText = $priceElement.text().trim();
                                         var priceMatch = priceText.match(/[\\d.,]+/);
                                         if (priceMatch) {
                                             price = parseFloat(priceMatch[0].replace(",", "."));
-                                            console.log("Prezzo trovato con selettore:", priceSelectors[i], "Prezzo:", price, "Testo:", priceText);
                                             break;
                                         }
                                     }
@@ -830,7 +859,6 @@ class WC_Cart_Product_Summary_Pro {
                                             style: "currency",
                                             currency: "EUR"
                                         });
-                                        console.log("Prezzo trovato negli attributi data:", price);
                                     }
                                 }
                             }
@@ -896,15 +924,6 @@ class WC_Cart_Product_Summary_Pro {
                             var priceData = getCurrentPrice();
                             var unitPrice = priceData.price;
                             var formattedPrice = priceData.formatted;
-
-                            console.log("Debug updateSummary:", {
-                                selectedQuantity: selectedQuantity,
-                                unitPrice: unitPrice,
-                                formattedPrice: formattedPrice,
-                                isSquareMeter: priceData.isSquareMeter,
-                                customQuantityExists: $customQuantity.length > 0,
-                                customQuantityValue: $customQuantity.length > 0 ? $customQuantity.val() : "N/A"
-                            });
 
                             if (selectedQuantity === 0 && !showPriceZero) {
                                 unitPrice = 0;
@@ -1021,13 +1040,6 @@ class WC_Cart_Product_Summary_Pro {
                                 var $customQuantity = $("#summary-quantity");
                                 var customQty = parseInt($customQuantity.val()) || 1;
 
-                                console.log("Debug bottone:", {
-                                    showAddToCart: showAddToCart,
-                                    selectedQuantity: selectedQuantity,
-                                    customQuantity: customQty,
-                                    buttonFound: $addButton.length > 0
-                                });
-
                                 if (selectedQuantity > 0 && customQty > 0) {
                                     $addButton.prop("disabled", false);
                                     $addButton.text("🛒 Aggiungi " + customQty + " al Carrello");
@@ -1041,6 +1053,14 @@ class WC_Cart_Product_Summary_Pro {
                                     updateQuantityButtons();
                                 }
                             }
+                        }
+                    }
+
+                    // Nascondi il prezzo dinamico originale sulla pagina se presente
+                    function hideDynamicPrice() {
+                        var $priceWrap = $(".tc-price-wrap");
+                        if ($priceWrap.length) {
+                            $priceWrap.hide();
                         }
                     }
                     
@@ -1198,14 +1218,11 @@ class WC_Cart_Product_Summary_Pro {
                     ].join(", ");
 
                     $(document).on("input change keyup blur paste", dimensionSelectors, function() {
-                        var fieldName = $(this).attr("name") || $(this).attr("id") || $(this).attr("class");
-                        console.log("Cambio dimensioni rilevato:", fieldName, "=", $(this).val());
                         setTimeout(updateSummary, 50);
                     });
 
                     // Event listener specifici per i campi di calcolo dinamico
                     $(document).on("input change keyup", "input[name*=\\\'tmcp\\\']", function() {
-                        console.log("Campo calcolo dinamico cambiato:", $(this).attr("name"), "=", $(this).val());
                         setTimeout(updateSummary, 100);
                     });
 
@@ -1222,12 +1239,10 @@ class WC_Cart_Product_Summary_Pro {
                                     $target.hasClass("price") ||
                                     $target.hasClass("tc-price")) {
                                     shouldUpdate = true;
-                                    console.log("Cambio prezzo rilevato nell\\\'elemento:", mutation.target.className);
                                 }
                             }
                         });
                         if (shouldUpdate) {
-                            console.log("Aggiornamento riepilogo per cambio prezzo");
                             setTimeout(updateSummary, 25);
                         }
                     });
@@ -1264,7 +1279,6 @@ class WC_Cart_Product_Summary_Pro {
                         var currentPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount").text() ||
                                          $(".price.tc-price .woocommerce-Price-amount.amount").text();
                         if (currentPrice && currentPrice !== lastPriceCheck) {
-                            console.log("Prezzo cambiato da", lastPriceCheck, "a", currentPrice);
                             lastPriceCheck = currentPrice;
                             updateSummary();
                         }
