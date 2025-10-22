@@ -588,6 +588,7 @@ class WC_Cart_Product_Summary_Pro {
                     var minQuantity = 1;
                     var maxQuantity = 0;
                     var stepQuantity = 1;
+                    var dynamicCalculatedPrice = 0; // Prezzo calcolato dal plugin Extra Product Options
 
                     // Funzione per leggere i limiti dal campo quantità originale
                     function readQuantityLimits() {
@@ -606,13 +607,103 @@ class WC_Cart_Product_Summary_Pro {
                         }
                     }
 
+                    // Funzione per leggere il prezzo dall\'elemento HTML specifico
+                    function readCalculatedPrice() {
+                        console.log("📍 Attempting to read calculated price...");
+
+                        // CONTROLLO PRELIMINARE: Verifica che i campi dimensione siano compilati
+                        var $widthField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").first();
+                        var $heightField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").last();
+
+                        if ($widthField.length && $heightField.length) {
+                            var widthValue = $widthField.val();
+                            var heightValue = $heightField.val();
+
+                            console.log("🔍 Checking dimension fields - Width:", widthValue, "Height:", heightValue);
+
+                            // Se uno dei due campi è vuoto o zero, azzera il prezzo
+                            if (!widthValue || !heightValue || parseFloat(widthValue) === 0 || parseFloat(heightValue) === 0) {
+                                console.log("⚠️ Dimension fields empty or zero - resetting price to 0");
+                                dynamicCalculatedPrice = 0;
+                                updateSummary();
+                                return;
+                            }
+                        }
+
+                        // METODO 1: Prova a leggere dall\'oggetto JavaScript di TM EPO
+                        if (typeof $.tcAPIGetPrice !== "undefined") {
+                            try {
+                                var apiPrice = $.tcAPIGetPrice();
+                                console.log("🔍 TM EPO API price:", apiPrice);
+                                if (apiPrice && apiPrice > 0) {
+                                    dynamicCalculatedPrice = parseFloat(apiPrice);
+                                    console.log("✅ Using TM EPO API price:", dynamicCalculatedPrice);
+                                    updateSummary();
+                                    return;
+                                }
+                            } catch(e) {
+                                console.log("⚠️ TM EPO API not available:", e);
+                            }
+                        }
+
+                        // METODO 2: Cerca tutti gli elementi bdi e prendi quello con il valore più alto
+                        var maxPrice = 0;
+                        var foundPrice = false;
+
+                        $(".tc-price-wrap .tc-price .woocommerce-Price-amount.amount bdi, .price.tc-price .woocommerce-Price-amount.amount bdi").each(function() {
+                            var priceText = $(this).text().trim();
+                            var match = priceText.match(/([\\d]+[.,][\\d]{2})/);
+
+                            if (match) {
+                                var price = parseFloat(match[1].replace(",", "."));
+                                console.log("🔍 Found price in DOM:", price, "from text:", priceText);
+
+                                if (price > maxPrice) {
+                                    maxPrice = price;
+                                    foundPrice = true;
+                                }
+                            }
+                        });
+
+                        if (foundPrice && maxPrice > 0) {
+                            dynamicCalculatedPrice = maxPrice;
+                            console.log("✅ Using max price from DOM:", dynamicCalculatedPrice);
+                            updateSummary();
+                            return;
+                        }
+
+                        console.log("⚠️ No valid price found");
+                    }
+
+                    // Event listener SPECIFICO per TM EPO - questo è il modo corretto per intercettare i cambiamenti
+                    $(document).on("tm-epo-check-dpd tm-epo-update", function() {
+                        console.log("🎯 TM EPO event fired, reading calculated price...");
+                        setTimeout(readCalculatedPrice, 500);
+                    });
+
+                    // Event listener su TUTTI i campi input della pagina prodotto
+                    // Quando l\'utente cambia un valore, leggiamo il prezzo calcolato
+                    $(document).on("input change blur", "input[type=text], input[type=number]", function() {
+                        console.log("🎯 Text/Number input changed, reading calculated price...");
+                        setTimeout(readCalculatedPrice, 800); // Aumentato timeout per dare più tempo al calcolo
+                    });
+
+                    // Event listener per checkbox e radio button (opzioni prodotto)
+                    $(document).on("change click", "input[type=checkbox], input[type=radio]", function() {
+                        console.log("🎯 Checkbox/Radio changed, reading calculated price...");
+                        setTimeout(readCalculatedPrice, 800);
+                    });
+
+                    // Event listener per select (dropdown)
+                    $(document).on("change", "select", function() {
+                        console.log("🎯 Select changed, reading calculated price...");
+                        setTimeout(readCalculatedPrice, 800);
+                    });
+
                     // Inizializza il widget con un leggero ritardo per assicurarsi che tutto sia caricato
                     setTimeout(function() {
                         // Leggi i limiti dal campo quantità esistente
                         readQuantityLimits();
-
-                        // Nascondi il prezzo dinamico originale
-                        hideDynamicPrice();
 
                         // Carica i dati del carrello
                         getCartData();
@@ -674,45 +765,125 @@ class WC_Cart_Product_Summary_Pro {
                         var priceText = "";
                         var isSquareMeter = false;
 
-                        // PRIORITÀ 1: Cerca SEMPRE prima il prezzo calcolato dinamicamente
+                        console.log("=== getCurrentPrice START ===");
+
+                        // CONTROLLO PRELIMINARE: Verifica che i campi dimensione siano compilati
+                        var $widthField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").first();
+                        var $heightField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").last();
+
+                        if ($widthField.length && $heightField.length) {
+                            var widthValue = $widthField.val();
+                            var heightValue = $heightField.val();
+
+                            // Se uno dei due campi è vuoto o zero, azzera il prezzo
+                            if (!widthValue || !heightValue || parseFloat(widthValue) === 0 || parseFloat(heightValue) === 0) {
+                                console.log("⚠️ getCurrentPrice: Dimension fields empty or zero - returning price 0");
+                                return {
+                                    price: 0,
+                                    basePrice: 0,
+                                    optionsPrice: 0,
+                                    isSquareMeter: false,
+                                    formatted: "€0,00"
+                                };
+                            }
+                        }
+
+                        // PRIORITÀ MASSIMA: Usa il prezzo calcolato dagli eventi del plugin se disponibile
+                        if (dynamicCalculatedPrice > 0) {
+                            price = dynamicCalculatedPrice;
+                            priceText = price.toLocaleString("it-IT", {
+                                style: "currency",
+                                currency: "EUR"
+                            });
+
+                            console.log("✓ Using price from TM EPO events:", price);
+                            console.log("SOURCE: Extra Product Options JavaScript events");
+
+                            // Se abbiamo un prezzo dagli eventi, saltiamo tutto il resto
+                            var optionsPrice = 0;
+                            $(".yith-wapo-option-value:checked").each(function() {
+                                var $option = $(this);
+                                var optionPrice = parseFloat($option.data("price")) || 0;
+                                var priceMethod = $option.data("price-method") || "increase";
+
+                                if (priceMethod === "increase") {
+                                    optionsPrice += optionPrice;
+                                }
+                            });
+
+                            var totalPrice = price + optionsPrice;
+                            console.log("Total with options:", totalPrice);
+
+                            return {
+                                price: totalPrice,
+                                basePrice: price,
+                                optionsPrice: optionsPrice,
+                                isSquareMeter: false,
+                                formatted: priceText
+                            };
+                        }
+
+                        console.log("No dynamic price from events, trying DOM reading...");
+
+                        // PRIORITÀ 2: Cerca il prezzo calcolato dinamicamente nel DOM
                         // Questo è il prezzo mostrato da Extra Product Options o altri plugin di calcolo
                         var $dynamicPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
+                        console.log("Dynamic price elements found:", $dynamicPrice.length);
 
-                        if ($dynamicPrice.length > 0 && $dynamicPrice.first().text().trim()) {
+                        if ($dynamicPrice.length > 0) {
                             var dynamicPriceText = $dynamicPrice.first().text().trim();
+                            console.log("Dynamic price text:", dynamicPriceText);
+                            console.log("Dynamic price HTML:", $dynamicPrice.first().html());
+                            console.log("Price wrap visible?", $dynamicPrice.closest(".tc-price-wrap").is(":visible"));
+
                             // Estrai solo i numeri dal testo (esempio: "29,51 €" -> "29.51")
                             var dynamicPriceMatch = dynamicPriceText.match(/([\\d.,]+)/);
 
                             if (dynamicPriceMatch) {
-                                price = parseFloat(dynamicPriceMatch[1].replace(",", "."));
-                                priceText = price.toLocaleString("it-IT", {
-                                    style: "currency",
-                                    currency: "EUR"
-                                });
+                                var parsedPrice = parseFloat(dynamicPriceMatch[1].replace(",", "."));
+                                console.log("Parsed price from DOM:", parsedPrice);
 
-                                // Se abbiamo trovato un prezzo dinamico, saltiamo tutto il resto
-                                // e andiamo direttamente alla sezione opzioni YITH
-                                var optionsPrice = 0;
-                                $(".yith-wapo-option-value:checked").each(function() {
-                                    var $option = $(this);
-                                    var optionPrice = parseFloat($option.data("price")) || 0;
-                                    var priceMethod = $option.data("price-method") || "increase";
+                                // IMPORTANTE: Usa il prezzo dinamico SEMPRE se è maggiore di 0
+                                if (parsedPrice > 0) {
+                                    price = parsedPrice;
+                                    priceText = price.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    });
 
-                                    if (priceMethod === "increase") {
-                                        optionsPrice += optionPrice;
-                                    }
-                                });
+                                    console.log("✓ Using dynamic price from DOM:", price);
+                                    console.log("SOURCE: Extra Product Options DOM");
 
-                                var totalPrice = price + optionsPrice;
+                                    // Se abbiamo trovato un prezzo dinamico valido, saltiamo tutto il resto
+                                    var optionsPrice = 0;
+                                    $(".yith-wapo-option-value:checked").each(function() {
+                                        var $option = $(this);
+                                        var optionPrice = parseFloat($option.data("price")) || 0;
+                                        var priceMethod = $option.data("price-method") || "increase";
 
-                                return {
-                                    price: totalPrice,
-                                    basePrice: price,
-                                    optionsPrice: optionsPrice,
-                                    isSquareMeter: false,
-                                    formatted: priceText
-                                };
+                                        if (priceMethod === "increase") {
+                                            optionsPrice += optionPrice;
+                                        }
+                                    });
+
+                                    var totalPrice = price + optionsPrice;
+                                    console.log("Total with options:", totalPrice);
+
+                                    return {
+                                        price: totalPrice,
+                                        basePrice: price,
+                                        optionsPrice: optionsPrice,
+                                        isSquareMeter: false,
+                                        formatted: priceText
+                                    };
+                                } else {
+                                    console.log("✗ Dynamic price from DOM is 0, will use fallback");
+                                }
+                            } else {
+                                console.log("✗ No price match found in DOM text");
                             }
+                        } else {
+                            console.log("✗ No dynamic price elements found in DOM");
                         }
 
                         // Controllo per calcolo al metro quadro
@@ -720,15 +891,23 @@ class WC_Cart_Product_Summary_Pro {
                         var $widthField = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\'], input[id*=\\\'width\\\'], input[id*=\\\'larghezza\\\'], input[id*=\\\'lunghezza\\\'], input[class*=\\\'width\\\'], input[class*=\\\'larghezza\\\'], input[class*=\\\'dimension\\\']");
                         var $heightField = $("input[name*=\\\'height\\\'], input[name*=\\\'altezza\\\'], input[name*=\\\'Height\\\'], input[name*=\\\'Altezza\\\'], input[id*=\\\'height\\\'], input[id*=\\\'altezza\\\'], input[class*=\\\'height\\\'], input[class*=\\\'altezza\\\'], input[class*=\\\'dimension\\\']:eq(1)");
 
+                        console.log("Width fields found:", $widthField.length);
+                        console.log("Height fields found:", $heightField.length);
+
                         // Controlla anche se esiste un sistema di calcolo dinamico
                         var $dynamicCalcField = $("input.tmcp-field.tc-is-math, input[data-rules], input[data-formula]");
                         var hasDynamicCalculation = $dynamicCalcField.length > 0;
+
+                        console.log("Dynamic calculation fields found:", $dynamicCalcField.length);
+                        console.log("Has dynamic calculation:", hasDynamicCalculation);
 
                         if (($widthField.length && $heightField.length) || hasDynamicCalculation) {
                             isSquareMeter = true;
                             var widthCm = 0;
                             var heightCm = 0;
                             var area = 0;
+
+                            console.log("Entering square meter / dynamic calculation logic");
 
                             if ($widthField.length && $heightField.length) {
                                 // Calcolo tradizionale con campi separati
@@ -737,14 +916,19 @@ class WC_Cart_Product_Summary_Pro {
                                 var widthM = widthCm / 100;
                                 var heightM = heightCm / 100;
                                 area = widthM * heightM;
+
+                                console.log("Square meter calculation - Width:", widthCm, "Height:", heightCm, "Area:", area);
                             } else if (hasDynamicCalculation) {
                                 // Sistema di calcolo dinamico - NON trattiamolo più come metro quadro
                                 // Saltiamo direttamente alla logica normale del prodotto
                                 isSquareMeter = false; // Forza la modalità normale
+                                console.log("Dynamic calculation detected - forcing normal mode");
                             }
 
                             // Solo se area > 0 procedi con la logica metro quadro
                             if (isSquareMeter && area > 0) {
+                                console.log("Square meter mode active with area:", area);
+
                                 // Prima verifica se esiste già un prezzo totale calcolato (scenario 1)
                                 // Cerca specificatamente nel container del calcolo dinamico
                                 var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
@@ -753,18 +937,23 @@ class WC_Cart_Product_Summary_Pro {
                                     // Usa il prezzo totale già calcolato dal sistema
                                     var totalPriceText = $totalPriceElement.text().trim();
                                     var totalPriceMatch = totalPriceText.match(/[\\d.,]+/);
+                                    console.log("Found total price element, text:", totalPriceText);
                                     if (totalPriceMatch) {
                                         price = parseFloat(totalPriceMatch[0].replace(",", "."));
                                         priceText = price.toLocaleString("it-IT", {
                                             style: "currency",
                                             currency: "EUR"
                                         });
+                                        console.log("✓ Using precalculated total price:", price);
+                                        console.log("SOURCE: Square meter - precalculated total");
                                     }
                                 } else {
+                                    console.log("No total price element found, will calculate manually");
                                 // Scenario 2: Calcola manualmente il prezzo (prezzo base * area)
                                 var basePricePerSqm = 0;
                                 if (currentVariationData && currentVariationData.display_price) {
                                     basePricePerSqm = parseFloat(currentVariationData.display_price);
+                                    console.log("Using variation data price per m²:", basePricePerSqm);
                                 } else {
                                     // Cerca il prezzo base in vari selettori (escludo tc-price per evitare conflitti)
                                     var priceSelectors = [
@@ -783,6 +972,7 @@ class WC_Cart_Product_Summary_Pro {
                                             var priceMatch = priceElementText.match(/[\\d.,]+/);
                                             if (priceMatch) {
                                                 basePricePerSqm = parseFloat(priceMatch[0].replace(",", "."));
+                                                console.log("Found base price per m² from selector", priceSelectors[i], ":", basePricePerSqm);
                                                 break;
                                             }
                                         }
@@ -796,9 +986,12 @@ class WC_Cart_Product_Summary_Pro {
                                         style: "currency",
                                         currency: "EUR"
                                     });
+                                    console.log("✓ Calculated price (m² * area):", basePricePerSqm, "*", area, "=", price);
+                                    console.log("SOURCE: Square meter - manual calculation");
                                 } else {
                                     price = 0;
                                     priceText = "€0,00";
+                                    console.log("✗ Cannot calculate square meter price - area:", area, "base price:", basePricePerSqm);
                                 }
                                 }
                             }
@@ -806,9 +999,13 @@ class WC_Cart_Product_Summary_Pro {
 
                         // Se isSquareMeter è false O non abbiamo trovato prezzo, usa la logica normale
                         if (!isSquareMeter || price === 0) {
+                            console.log("Using normal product logic - isSquareMeter:", isSquareMeter, "price:", price);
+
                             // Logica normale per prodotti non al metro quadro
                             if (currentVariationData && currentVariationData.display_price) {
                                 price = parseFloat(currentVariationData.display_price);
+                                console.log("✓ Using variation price:", price);
+                                console.log("SOURCE: Variation data");
 
                                 if (currentVariationData.price_html) {
                                     var tempDiv = $("<div>").html(currentVariationData.price_html);
@@ -826,6 +1023,8 @@ class WC_Cart_Product_Summary_Pro {
                                     });
                                 }
                             } else {
+                                console.log("No variation data, searching for simple product price");
+
                                 // Cerca il prezzo in vari selettori per prodotti semplici
                                 var priceSelectors = [
                                     ".price.tc-price .woocommerce-Price-amount.amount", // Prezzo calcolato dinamicamente
@@ -845,6 +1044,8 @@ class WC_Cart_Product_Summary_Pro {
                                         var priceMatch = priceText.match(/[\\d.,]+/);
                                         if (priceMatch) {
                                             price = parseFloat(priceMatch[0].replace(",", "."));
+                                            console.log("✓ Found price from selector", priceSelectors[i], ":", price);
+                                            console.log("SOURCE: Simple product - selector", priceSelectors[i]);
                                             break;
                                         }
                                     }
@@ -852,6 +1053,7 @@ class WC_Cart_Product_Summary_Pro {
 
                                 // Se non ha ancora trovato il prezzo, cerca negli attributi
                                 if (price === 0) {
+                                    console.log("No price from selectors, searching data attributes");
                                     var productPrice = $("form.cart").data("product_price") || $(".single-product").data("price");
                                     if (productPrice) {
                                         price = parseFloat(productPrice);
@@ -859,6 +1061,10 @@ class WC_Cart_Product_Summary_Pro {
                                             style: "currency",
                                             currency: "EUR"
                                         });
+                                        console.log("✓ Found price from data attribute:", price);
+                                        console.log("SOURCE: Data attribute");
+                                    } else {
+                                        console.log("✗ No price found anywhere");
                                     }
                                 }
                             }
@@ -866,18 +1072,35 @@ class WC_Cart_Product_Summary_Pro {
 
                         // Aggiungi i costi delle opzioni YITH WAPO selezionate
                         var optionsPrice = 0;
+                        var optionsCount = 0;
                         $(".yith-wapo-option-value:checked").each(function() {
                             var $option = $(this);
                             var optionPrice = parseFloat($option.data("price")) || 0;
                             var priceMethod = $option.data("price-method") || "increase";
 
+                            console.log("YITH option found - price:", optionPrice, "method:", priceMethod);
+
                             if (priceMethod === "increase") {
                                 optionsPrice += optionPrice;
+                                optionsCount++;
                             }
                         });
 
+                        if (optionsCount > 0) {
+                            console.log("Total YITH options price:", optionsPrice, "from", optionsCount, "options");
+                        } else {
+                            console.log("No YITH options selected");
+                        }
+
                         // Somma prezzo base + opzioni
                         var totalPrice = price + optionsPrice;
+
+                        console.log("=== FINAL PRICE CALCULATION ===");
+                        console.log("Base price:", price);
+                        console.log("Options price:", optionsPrice);
+                        console.log("Total price:", totalPrice);
+                        console.log("Is square meter:", isSquareMeter);
+                        console.log("=== getCurrentPrice END ===");
 
                         return {
                             price: totalPrice,
@@ -1056,13 +1279,6 @@ class WC_Cart_Product_Summary_Pro {
                         }
                     }
 
-                    // Nascondi il prezzo dinamico originale sulla pagina se presente
-                    function hideDynamicPrice() {
-                        var $priceWrap = $(".tc-price-wrap");
-                        if ($priceWrap.length) {
-                            $priceWrap.hide();
-                        }
-                    }
                     
                     $(document).on("input change keyup", "input.qty, input[name=quantity]", function() {
                         setTimeout(updateSummary, 100);
@@ -1072,8 +1288,15 @@ class WC_Cart_Product_Summary_Pro {
                         setTimeout(updateSummary, 200);
                     });
 
-                    // Event listener per i checkbox delle opzioni YITH WAPO
-                    $(document).on("change", ".yith-wapo-option-value", function() {
+                    // Event listener per tutte le opzioni YITH WAPO (checkbox, radio, select, etc.)
+                    $(document).on("change", ".yith-wapo-option-value, .yith-wapo-option select, .yith-wapo-option input, select[name*=\'yith_wapo\'], input[name*=\'yith_wapo\'], .yith-wapo-wrapper select, .yith-wapo-wrapper input", function() {
+                        console.log("YITH WAPO option changed, updating summary...");
+                        setTimeout(updateSummary, 100);
+                    });
+
+                    // Event listener per cambiamenti nel form prodotto (Extra Product Options)
+                    $(document).on("change", "form.cart select, form.cart input[type=radio], .variations_form select, .variations_form input", function() {
+                        console.log("Product form changed, updating summary...");
                         setTimeout(updateSummary, 100);
                     });
 
@@ -1262,8 +1485,8 @@ class WC_Cart_Product_Summary_Pro {
                         });
                     });
 
-                    // Observer specifico per l\\\'intero container del calcolo dinamico
-                    var dynamicCalcContainers = document.querySelectorAll(".tc-element-container, .tmcp-ul-wrap, .tm-extra-product-options-dynamic");
+                    // Observer specifico per l\\\'intero container del calcolo dinamico e YITH WAPO
+                    var dynamicCalcContainers = document.querySelectorAll(".tc-element-container, .tmcp-ul-wrap, .tm-extra-product-options-dynamic, .yith-wapo-wrapper, .yith-wapo-container");
                     dynamicCalcContainers.forEach(function(container) {
                         priceObserver.observe(container, {
                             childList: true,
