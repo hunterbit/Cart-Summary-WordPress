@@ -584,6 +584,7 @@ class WC_Cart_Product_Summary_Pro {
                     var cartTotal = 0;
                     var currentVariationData = null;
                     var showVat = ' . ($this->get_option('show_vat') === 'yes' ? 'true' : 'false') . ';
+                    var pricesIncludeTax = ' . (wc_prices_include_tax() ? 'true' : 'false') . ';
                     var productVatRate = 0;
                     var minQuantity = 1;
                     var maxQuantity = 0;
@@ -611,19 +612,17 @@ class WC_Cart_Product_Summary_Pro {
                     function readCalculatedPrice() {
                         console.log("📍 Attempting to read calculated price...");
 
-                        // CONTROLLO PRELIMINARE: Verifica che i campi dimensione siano compilati
-                        var $widthField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").first();
-                        var $heightField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").last();
+                        
 
-                        if ($widthField.length && $heightField.length) {
-                            var widthValue = $widthField.val();
-                            var heightValue = $heightField.val();
+                        
 
-                            console.log("🔍 Checking dimension fields - Width:", widthValue, "Height:", heightValue);
-
-                            // Se uno dei due campi è vuoto o zero, azzera il prezzo
-                            if (!widthValue || !heightValue || parseFloat(widthValue) === 0 || parseFloat(heightValue) === 0) {
-                                console.log("⚠️ Dimension fields empty or zero - resetting price to 0");
+                        // Controllo dimensioni obbligatorie se presenti
+                        var $widthFieldReq = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\']");
+                        var $heightFieldReq = $("input[name*=\\\'height\\\'], input[name*=\\\'altezza\\\'], input[name*=\\\'Height\\\'], input[name*=\\\'Altezza\\\']");
+                        if ($widthFieldReq.length && $heightFieldReq.length) {
+                            var wv = parseFloat($widthFieldReq.first().val()) || 0;
+                            var hv = parseFloat($heightFieldReq.first().val()) || 0;
+                            if (wv <= 0 || hv <= 0) {
                                 dynamicCalculatedPrice = 0;
                                 updateSummary();
                                 return;
@@ -646,30 +645,22 @@ class WC_Cart_Product_Summary_Pro {
                             }
                         }
 
-                        // METODO 2: Cerca tutti gli elementi bdi e prendi quello con il valore più alto
-                        var maxPrice = 0;
-                        var foundPrice = false;
-
-                        $(".tc-price-wrap .tc-price .woocommerce-Price-amount.amount bdi, .price.tc-price .woocommerce-Price-amount.amount bdi").each(function() {
-                            var priceText = $(this).text().trim();
-                            var match = priceText.match(/([\\d]+[.,][\\d]{2})/);
-
+                        var $totalWrap = $(".tc-price-wrap").filter(function(){
+                            var t = $(this).find(".before-amount").first().text().trim().toLowerCase();
+                            return t.indexOf("totale") === 0;
+                        }).first();
+                        if ($totalWrap.length) {
+                            var priceText = $totalWrap.find(".price.tc-price .woocommerce-Price-amount.amount bdi").first().text().trim();
+                            var match = priceText.match(/([\\d.,]+)/);
                             if (match) {
                                 var price = parseFloat(match[1].replace(",", "."));
-                                console.log("🔍 Found price in DOM:", price, "from text:", priceText);
-
-                                if (price > maxPrice) {
-                                    maxPrice = price;
-                                    foundPrice = true;
+                                if (!isNaN(price)) {
+                                    dynamicCalculatedPrice = price;
+                                    console.log("✅ Using price from Totale wrap:", dynamicCalculatedPrice);
+                                    updateSummary();
+                                    return;
                                 }
                             }
-                        });
-
-                        if (foundPrice && maxPrice > 0) {
-                            dynamicCalculatedPrice = maxPrice;
-                            console.log("✅ Using max price from DOM:", dynamicCalculatedPrice);
-                            updateSummary();
-                            return;
                         }
 
                         console.log("⚠️ No valid price found");
@@ -735,12 +726,6 @@ class WC_Cart_Product_Summary_Pro {
                     function getProductVatRate(productId) {
                         if (!showVat) return;
 
-                        // Per il debugging, forziamo l\'aliquota IVA al 22%
-                        productVatRate = 22;
-                        updateSummary();
-
-                        // Commentiamo temporaneamente la chiamata AJAX per il debug
-                        /*
                         $.ajax({
                             url: "' . admin_url('admin-ajax.php') . '",
                             type: "POST",
@@ -751,13 +736,18 @@ class WC_Cart_Product_Summary_Pro {
                                 nonce: "' . wp_create_nonce('vat_rate_nonce') . '"
                             },
                             success: function(response) {
-                                if (response.success) {
+                                if (response && response.success) {
                                     productVatRate = parseFloat(response.data.vat_rate) || 0;
+                                    console.log("VAT rate updated", { rate: productVatRate, debug: response.data.debug });
                                     updateSummary();
+                                } else {
+                                    console.log("VAT AJAX failed", response);
                                 }
+                            },
+                            error: function(xhr, status, err) {
+                                console.log("VAT AJAX error", { status: status, error: err });
                             }
                         });
-                        */
                     }
                     
                     function getCurrentPrice() {
@@ -766,27 +756,9 @@ class WC_Cart_Product_Summary_Pro {
                         var isSquareMeter = false;
 
                         console.log("=== getCurrentPrice START ===");
+                        console.log("dynamicCalculatedPrice:", dynamicCalculatedPrice);
 
-                        // CONTROLLO PRELIMINARE: Verifica che i campi dimensione siano compilati
-                        var $widthField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").first();
-                        var $heightField = $("input[name*=\\\'tmcp\\\'][type=text], input[name*=\\\'tmcp\\\'][type=number]").last();
-
-                        if ($widthField.length && $heightField.length) {
-                            var widthValue = $widthField.val();
-                            var heightValue = $heightField.val();
-
-                            // Se uno dei due campi è vuoto o zero, azzera il prezzo
-                            if (!widthValue || !heightValue || parseFloat(widthValue) === 0 || parseFloat(heightValue) === 0) {
-                                console.log("⚠️ getCurrentPrice: Dimension fields empty or zero - returning price 0");
-                                return {
-                                    price: 0,
-                                    basePrice: 0,
-                                    optionsPrice: 0,
-                                    isSquareMeter: false,
-                                    formatted: "€0,00"
-                                };
-                            }
-                        }
+                        
 
                         // PRIORITÀ MASSIMA: Usa il prezzo calcolato dagli eventi del plugin se disponibile
                         if (dynamicCalculatedPrice > 0) {
@@ -1156,6 +1128,7 @@ class WC_Cart_Product_Summary_Pro {
                             var selectedTotal = selectedQuantity * unitPrice;
                             var totalQuantity = cartQuantity + selectedQuantity;
                             var grandTotal = cartTotal + selectedTotal;
+                            console.log("SUMMARY", { unitPrice: unitPrice, formattedPrice: formattedPrice, selectedQuantity: selectedQuantity, selectedTotal: selectedTotal, cartQuantity: cartQuantity, cartTotal: cartTotal, grandTotal: grandTotal });
                             
                             if (showCart) {
                                 $summary.find(".cart-quantity").text(cartQuantity);
@@ -1195,7 +1168,11 @@ class WC_Cart_Product_Summary_Pro {
                                 if (currentShowVat) {
                                     var selectedVatAmount = 0;
                                     if (productVatRate > 0) {
-                                        selectedVatAmount = selectedTotal * (productVatRate / (100 + productVatRate));
+                                        if (pricesIncludeTax) {
+                                            selectedVatAmount = selectedTotal * (productVatRate / (100 + productVatRate));
+                                        } else {
+                                            selectedVatAmount = selectedTotal * (productVatRate / 100);
+                                        }
                                     }
                                     $summary.find(".vat-amount-selected").text(selectedVatAmount.toLocaleString("it-IT", {
                                         style: "currency",
@@ -1215,17 +1192,21 @@ class WC_Cart_Product_Summary_Pro {
                                 if (currentShowVat) {
                                     var vatAmount = 0;
                                     if (productVatRate > 0) {
-                                        vatAmount = grandTotal * (productVatRate / (100 + productVatRate));
+                                        if (pricesIncludeTax) {
+                                            vatAmount = grandTotal * (productVatRate / (100 + productVatRate));
+                                        } else {
+                                            vatAmount = grandTotal * (productVatRate / 100);
+                                        }
                                     }
                                     $summary.find(".vat-amount").text(vatAmount.toLocaleString("it-IT", {
                                         style: "currency",
                                         currency: "EUR"
                                     }));
 
-                                    // Debug console per controllare i valori
                                     console.log("VAT Debug:", {
                                         showVat: currentShowVat,
                                         vatRate: productVatRate,
+                                        includeTax: pricesIncludeTax,
                                         grandTotal: grandTotal,
                                         vatAmount: vatAmount
                                     });
@@ -1238,7 +1219,7 @@ class WC_Cart_Product_Summary_Pro {
                                 $summary.find(".cart-section").hide();
                             }
                             
-                            if (showSelected && selectedQuantity > 0) {
+                            if (showSelected && (selectedQuantity > 0 || showPriceZero)) {
                                 $summary.find(".selected-section").show();
                             } else {
                                 $summary.find(".selected-section").hide();
@@ -1246,7 +1227,7 @@ class WC_Cart_Product_Summary_Pro {
                             
                             var shouldShowWidget = false;
                             if (showCart && cartQuantity > 0) shouldShowWidget = true;
-                            if (showSelected && selectedQuantity > 0) shouldShowWidget = true;
+                            if (showSelected && (selectedQuantity > 0 || showPriceZero)) shouldShowWidget = true;
                             if (showTotal && totalQuantity > 0) shouldShowWidget = true;
                             
                             if (shouldShowWidget) {
@@ -1590,11 +1571,9 @@ class WC_Cart_Product_Summary_Pro {
      * @return string HTML del widget
      */
     public function display_cart_summary($atts = array()) {
-        // Verifica se l'utente è loggato
         if (!is_user_logged_in()) {
             return '';
         }
-
         // Mostra il widget solo nelle pagine prodotto
         if (!is_product()) {
             return '';
@@ -1855,7 +1834,17 @@ class WC_Cart_Product_Summary_Pro {
             $product = wc_get_product($product_id);
         }
 
-        $vat_rate = $this->get_product_vat_rate($product);
+        $vat_rate = 0;
+        if ($product) {
+            $vat_rate = $this->get_product_vat_rate($product);
+            if ($vat_rate <= 0) {
+                $price_inc = wc_get_price_including_tax($product, array('qty' => 1));
+                $price_exc = wc_get_price_excluding_tax($product, array('qty' => 1));
+                if ($price_exc > 0 && $price_inc >= $price_exc) {
+                    $vat_rate = (($price_inc - $price_exc) / $price_exc) * 100;
+                }
+            }
+        }
 
         // Debug: logga le informazioni per troubleshooting
         error_log("VAT Rate Debug - Product ID: $product_id, Variation ID: $variation_id, VAT Rate: $vat_rate");
