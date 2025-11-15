@@ -608,6 +608,30 @@ class WC_Cart_Product_Summary_Pro {
                         }
                     }
 
+                    // Funzione helper GLOBALE per verificare se un elemento è dentro il widget carrello
+                    function isInCartWidget($element) {
+                        var cartWidgetSelectors = [
+                            ".elementor-menu-cart__main",  // Carrello laterale Elementor (PRIORITÀ MASSIMA)
+                            ".woocommerce-mini-cart",
+                            ".widget_shopping_cart",
+                            ".cart_list",
+                            ".product_list_widget",
+                            ".mini_cart_item",
+                            "aside",
+                            ".sidebar",
+                            ".widget",
+                            ".header-cart",
+                            "#shopping-cart-widget"
+                        ];
+
+                        for (var i = 0; i < cartWidgetSelectors.length; i++) {
+                            if ($element.closest(cartWidgetSelectors[i]).length > 0) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
                     // Funzione per leggere il prezzo dall\'elemento HTML specifico
                     function readCalculatedPrice() {
                         console.log("📍 Attempting to read calculated price...");
@@ -625,8 +649,10 @@ class WC_Cart_Product_Summary_Pro {
                             }
                         }
 
-                        // METODO 1: Cerca SPECIFICAMENTE nel container del plugin (più selettivo)
-                        var $specificContainers = $(".tc-price-wrap, .tm-extra-product-options, form.cart");
+                        // METODO 1: Cerca SPECIFICAMENTE nel container del plugin (più selettivo) ESCLUDENDO carrello
+                        var $specificContainers = $(".tc-price-wrap, .tm-extra-product-options, form.cart").filter(function() {
+                            return !isInCartWidget($(this));
+                        });
                         var foundPrice = false;
 
                         $specificContainers.each(function() {
@@ -635,6 +661,10 @@ class WC_Cart_Product_Summary_Pro {
                             var $container = $(this);
                             // Cerca elementi che contengono ESATTAMENTE "Totale:" seguito da un prezzo
                             var $totalElements = $container.find("*").filter(function() {
+                                // Escludi elementi dentro widget carrello
+                                if (isInCartWidget($(this))) {
+                                    return false;
+                                }
                                 var ownText = $(this).clone().children().remove().end().text().trim();
                                 // Match molto specifico: deve iniziare con "Totale:" e avere un prezzo
                                 return /^totale\\s*:\\s*[\\d.,]+\\s*€?$/i.test(ownText);
@@ -658,7 +688,7 @@ class WC_Cart_Product_Summary_Pro {
 
                                 // Altern ativa: cerca l\'elemento prezzo dentro
                                 var $priceElement = $totalElements.first().find(".woocommerce-Price-amount, .amount, bdi").last();
-                                if ($priceElement.length) {
+                                if ($priceElement.length && !isInCartWidget($priceElement)) {
                                     var priceText = $priceElement.text().trim();
                                     console.log("🔍 Price in specific element:", priceText);
                                     var match = priceText.match(/([\\d.,]+)/);
@@ -694,8 +724,11 @@ class WC_Cart_Product_Summary_Pro {
                             }
                         }
 
-                        // METODO 3: Cerca il prezzo nel wrap specifico
+                        // METODO 3: Cerca il prezzo nel wrap specifico (ESCLUDENDO carrello)
                         var $totalWrap = $(".tc-price-wrap").filter(function(){
+                            if (isInCartWidget($(this))) {
+                                return false;
+                            }
                             var t = $(this).find(".before-amount").first().text().trim().toLowerCase();
                             return t.indexOf("totale") === 0;
                         }).first();
@@ -749,8 +782,14 @@ class WC_Cart_Product_Summary_Pro {
                         setTimeout(function() {
                             console.log("🔍 Cercando prezzo laser calcolato...");
 
-                            // Strategia 1: Cerca nel container tc-price-wrap con label "Totale:"
+                            // Usa la funzione globale isInCartWidget() per escludere elementi del carrello laterale
+
+                            // Strategia 1: Cerca nel container tc-price-wrap con label "Totale:" (SOLO nel contenuto prodotto)
                             var $totalWrap = $(".tc-price-wrap").filter(function() {
+                                // Escludi elementi dentro widget carrello
+                                if (isInCartWidget($(this))) {
+                                    return false;
+                                }
                                 var labelText = $(this).find(".before-amount, .tc-label").text().trim().toLowerCase();
                                 return labelText.indexOf("totale") === 0 || labelText === "totale:" || labelText === "totale";
                             });
@@ -774,12 +813,15 @@ class WC_Cart_Product_Summary_Pro {
                                 }
                             }
 
-                            // Strategia 2: Cerca tutti i tc-price-wrap e prendi l\'ultimo (di solito è il totale)
-                            var $allPriceWraps = $(".tc-price-wrap .woocommerce-Price-amount.amount");
+                            // Strategia 2: Cerca tutti i tc-price-wrap (escludendo widget carrello) e prendi l\'ultimo
+                            var $allPriceWraps = $(".tc-price-wrap .woocommerce-Price-amount.amount").filter(function() {
+                                return !isInCartWidget($(this));
+                            });
+
                             if ($allPriceWraps.length > 0) {
                                 var $lastPrice = $allPriceWraps.last();
                                 var priceText = $lastPrice.text().trim();
-                                console.log("💰 Prezzo trovato nell\'ultimo tc-price-wrap:", priceText);
+                                console.log("💰 Prezzo trovato nell\'ultimo tc-price-wrap (filtrato):", priceText);
 
                                 var priceMatch = priceText.match(/([\\d.,]+)/);
                                 if (priceMatch) {
@@ -793,9 +835,9 @@ class WC_Cart_Product_Summary_Pro {
                                 }
                             }
 
-                            // Strategia 3: Cerca specificamente nel form.cart
+                            // Strategia 3: Cerca specificamente nel form.cart (area prodotto principale)
                             var $formPrice = $("form.cart .tc-price-wrap .woocommerce-Price-amount.amount").last();
-                            if ($formPrice.length > 0) {
+                            if ($formPrice.length > 0 && !isInCartWidget($formPrice)) {
                                 var priceText = $formPrice.text().trim();
                                 console.log("💰 Prezzo trovato in form.cart:", priceText);
 
@@ -925,8 +967,11 @@ class WC_Cart_Product_Summary_Pro {
 
                         // PRIORITÀ 2: Cerca il prezzo calcolato dinamicamente nel DOM
                         // Questo è il prezzo mostrato da Extra Product Options o altri plugin di calcolo
-                        var $dynamicPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
-                        console.log("Dynamic price elements found:", $dynamicPrice.length);
+                        // IMPORTANTE: Escludiamo i prezzi del carrello laterale
+                        var $dynamicPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount").filter(function() {
+                            return !isInCartWidget($(this));
+                        });
+                        console.log("Dynamic price elements found (excluding cart):", $dynamicPrice.length);
 
                         if ($dynamicPrice.length > 0) {
                             var dynamicPriceText = $dynamicPrice.first().text().trim();
@@ -1029,7 +1074,10 @@ class WC_Cart_Product_Summary_Pro {
 
                                 // Prima verifica se esiste già un prezzo totale calcolato (scenario 1)
                                 // Cerca specificatamente nel container del calcolo dinamico
-                                var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount");
+                                // IMPORTANTE: Escludiamo i prezzi del carrello laterale
+                                var $totalPriceElement = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount").filter(function() {
+                                    return !isInCartWidget($(this));
+                                });
 
                                 if ($totalPriceElement.length && $totalPriceElement.text().trim()) {
                                     // Usa il prezzo totale già calcolato dal sistema
@@ -1064,7 +1112,9 @@ class WC_Cart_Product_Summary_Pro {
                                     ];
 
                                     for (var i = 0; i < priceSelectors.length; i++) {
-                                        var $priceElement = $(priceSelectors[i]);
+                                        var $priceElement = $(priceSelectors[i]).filter(function() {
+                                            return !isInCartWidget($(this));
+                                        });
                                         if ($priceElement.length && $priceElement.text().trim()) {
                                             var priceElementText = $priceElement.text().trim();
                                             var priceMatch = priceElementText.match(/[\\d.,]+/);
@@ -1135,7 +1185,9 @@ class WC_Cart_Product_Summary_Pro {
                                 ];
 
                                 for (var i = 0; i < priceSelectors.length; i++) {
-                                    var $priceElement = $(priceSelectors[i]);
+                                    var $priceElement = $(priceSelectors[i]).filter(function() {
+                                        return !isInCartWidget($(this));
+                                    });
 
                                     if ($priceElement.length && $priceElement.text().trim()) {
                                         priceText = $priceElement.text().trim();
@@ -1556,12 +1608,17 @@ class WC_Cart_Product_Summary_Pro {
                         setTimeout(updateSummary, 100);
                     });
 
-                    // Observer dedicato SOLO per il container dei prezzi del plugin
+                    // Observer dedicato SOLO per il container dei prezzi del plugin (ESCLUDENDO carrello)
                     var totalPriceObserver = new MutationObserver(function(mutations) {
                         var shouldRead = false;
                         mutations.forEach(function(mutation) {
                             if (mutation.type === "childList" || mutation.type === "characterData") {
                                 var $target = $(mutation.target);
+
+                                // ESCLUDI elementi dentro il carrello laterale
+                                if (isInCartWidget($target)) {
+                                    return;
+                                }
 
                                 // Controlla SOLO se siamo dentro i container del plugin
                                 if ($target.closest(".tc-price-wrap, .tm-extra-product-options, form.cart").length) {
@@ -1574,31 +1631,44 @@ class WC_Cart_Product_Summary_Pro {
                         });
 
                         if (shouldRead) {
-                            console.log("🔔 Relevant price mutation detected");
+                            console.log("🔔 Relevant price mutation detected (outside cart widget)");
                             setTimeout(readCalculatedPrice, 200);
                         }
                     });
 
-                    // Osserva SOLO i container specifici del plugin, non tutto il body
+                    // Osserva SOLO i container specifici del plugin (ESCLUDENDO carrello), non tutto il body
                     setTimeout(function() {
-                        var containersToWatch = document.querySelectorAll(".tc-price-wrap, .tm-extra-product-options, form.cart");
-                        containersToWatch.forEach(function(container) {
-                            totalPriceObserver.observe(container, {
-                                childList: true,
-                                subtree: true,
-                                characterData: true,
-                                attributes: false
-                            });
+                        var allContainers = document.querySelectorAll(".tc-price-wrap, .tm-extra-product-options, form.cart");
+                        var containersToWatch = [];
+
+                        // Filtra i container escludendo quelli dentro il carrello
+                        allContainers.forEach(function(container) {
+                            if (!isInCartWidget($(container))) {
+                                containersToWatch.push(container);
+                                totalPriceObserver.observe(container, {
+                                    childList: true,
+                                    subtree: true,
+                                    characterData: true,
+                                    attributes: false
+                                });
+                            }
                         });
-                        console.log("👀 Watching", containersToWatch.length, "price containers");
+
+                        console.log("👀 Watching", containersToWatch.length, "price containers (cart excluded)");
                     }, 1000);
 
-                    // Observer potenziato per monitorare cambiamenti nel prezzo
+                    // Observer potenziato per monitorare cambiamenti nel prezzo (ESCLUDENDO carrello)
                     var priceObserver = new MutationObserver(function(mutations) {
                         var shouldUpdate = false;
                         mutations.forEach(function(mutation) {
                             if (mutation.type === "childList" || mutation.type === "characterData") {
                                 var $target = $(mutation.target);
+
+                                // ESCLUDI elementi dentro il carrello laterale
+                                if (isInCartWidget($target)) {
+                                    return;
+                                }
+
                                 // Monitora vari elementi prezzo
                                 if ($target.closest(".price").length ||
                                     $target.closest(".woocommerce-Price-amount").length ||
@@ -1614,11 +1684,16 @@ class WC_Cart_Product_Summary_Pro {
                         }
                     });
 
-                    // Osserva cambiamenti in tutti gli elementi prezzo possibili
+                    // Osserva cambiamenti in tutti gli elementi prezzo possibili (ESCLUDENDO carrello)
                     var priceSelectors = [".price", ".woocommerce-Price-amount", ".amount", ".tc-price", ".tc-price-wrap"];
                     priceSelectors.forEach(function(selector) {
                         var elements = document.querySelectorAll(selector);
                         elements.forEach(function(element) {
+                            // Salta elementi dentro il carrello
+                            if (isInCartWidget($(element))) {
+                                return;
+                            }
+
                             priceObserver.observe(element, {
                                 childList: true,
                                 subtree: true,
@@ -1629,9 +1704,14 @@ class WC_Cart_Product_Summary_Pro {
                         });
                     });
 
-                    // Observer specifico per l\\\'intero container del calcolo dinamico e YITH WAPO
+                    // Observer specifico per l\\\'intero container del calcolo dinamico e YITH WAPO (ESCLUDENDO carrello)
                     var dynamicCalcContainers = document.querySelectorAll(".tc-element-container, .tmcp-ul-wrap, .tm-extra-product-options-dynamic, .yith-wapo-wrapper, .yith-wapo-container");
                     dynamicCalcContainers.forEach(function(container) {
+                        // Salta container dentro il carrello
+                        if (isInCartWidget($(container))) {
+                            return;
+                        }
+
                         priceObserver.observe(container, {
                             childList: true,
                             subtree: true,
@@ -1640,13 +1720,18 @@ class WC_Cart_Product_Summary_Pro {
                         });
                     });
 
-                    // Timer aggiuntivo per monitoraggio continuo del prezzo (fallback)
+                    // Timer aggiuntivo per monitoraggio continuo del prezzo (fallback) - ESCLUDENDO carrello
                     var lastPriceCheck = "";
                     setInterval(function() {
-                        var currentPrice = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount").text() ||
-                                         $(".price.tc-price .woocommerce-Price-amount.amount").text();
+                        // Filtra SOLO prezzi NON dentro il carrello laterale
+                        var $priceElements = $(".tc-price-wrap .price.tc-price .woocommerce-Price-amount.amount, .price.tc-price .woocommerce-Price-amount.amount").filter(function() {
+                            return !isInCartWidget($(this));
+                        });
+
+                        var currentPrice = $priceElements.first().text();
                         if (currentPrice && currentPrice !== lastPriceCheck) {
                             lastPriceCheck = currentPrice;
+                            console.log("⏱️ Timer detected price change (outside cart):", currentPrice);
                             updateSummary();
                         }
                     }, 300);
