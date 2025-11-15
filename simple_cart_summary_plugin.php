@@ -81,7 +81,11 @@ class WC_Cart_Product_Summary_Pro {
         // Hook AJAX per ottenere aliquota IVA del prodotto
         add_action('wp_ajax_get_product_vat_rate', array($this, 'ajax_get_product_vat_rate'));
         add_action('wp_ajax_nopriv_get_product_vat_rate', array($this, 'ajax_get_product_vat_rate'));
-        
+
+        // Hook AJAX per ottenere prezzo prodotto (semplice, variabile, base)
+        add_action('wp_ajax_get_product_price', array($this, 'ajax_get_product_price'));
+        add_action('wp_ajax_nopriv_get_product_price', array($this, 'ajax_get_product_price'));
+
         // Auto-add del widget se abilitato nelle impostazioni
         if ($this->get_option('auto_add_pages') === 'yes') {
             add_action('woocommerce_single_product_summary', array($this, 'auto_add_widget'), 25);
@@ -590,6 +594,9 @@ class WC_Cart_Product_Summary_Pro {
                     var maxQuantity = 0;
                     var stepQuantity = 1;
                     var dynamicCalculatedPrice = 0; // Prezzo calcolato dal plugin Extra Product Options
+                    var productType = "variabile"; // Tipo prodotto: semplice, variabile, metroquadro
+                    var simpleProductPrice = 0; // Prezzo fisso per prodotti semplici (da AJAX)
+                    var baseSquareMeterPrice = 0; // Prezzo base al m² per prodotti metroquadro
 
                     // Funzione per leggere i limiti dal campo quantità originale
                     function readQuantityLimits() {
@@ -861,11 +868,18 @@ class WC_Cart_Product_Summary_Pro {
 
                     // Inizializza il widget con un leggero ritardo per assicurarsi che tutto sia caricato
                     setTimeout(function() {
+                        // Leggi il tipo di prodotto dal widget
+                        productType = $(".wc-cart-product-summary").data("product-type") || "variabile";
+                        console.log("🎯 Product Type:", productType);
+
                         // Leggi i limiti dal campo quantità esistente
                         readQuantityLimits();
 
                         // Carica i dati del carrello
                         getCartData();
+
+                        // Carica il prezzo del prodotto (per prodotti semplici e metroquadro)
+                        getProductPrice();
 
                         updateSummary();
                     }, 1000);
@@ -917,16 +931,163 @@ class WC_Cart_Product_Summary_Pro {
                             }
                         });
                     }
-                    
+
+                    function getProductPrice() {
+                        var productId = $(".wc-cart-product-summary").data("product-id");
+
+                        $.ajax({
+                            url: "' . admin_url('admin-ajax.php') . '",
+                            type: "POST",
+                            data: {
+                                action: "get_product_price",
+                                product_id: productId,
+                                variation_id: currentVariationData ? currentVariationData.variation_id : 0,
+                                product_type: productType,
+                                nonce: "' . wp_create_nonce('product_price_nonce') . '"
+                            },
+                            success: function(response) {
+                                if (response && response.success) {
+                                    simpleProductPrice = parseFloat(response.data.price) || 0;
+                                    baseSquareMeterPrice = parseFloat(response.data.price) || 0;
+                                    console.log("💰 Product price loaded", {
+                                        type: productType,
+                                        simplePrice: simpleProductPrice,
+                                        baseSqmPrice: baseSquareMeterPrice,
+                                        debug: response.data.debug
+                                    });
+                                    updateSummary();
+                                } else {
+                                    console.log("Price AJAX failed", response);
+                                }
+                            },
+                            error: function(xhr, status, err) {
+                                console.log("Price AJAX error", { status: status, error: err });
+                            }
+                        });
+                    }
+
                     function getCurrentPrice() {
                         var price = 0;
                         var priceText = "";
                         var isSquareMeter = false;
 
                         console.log("=== getCurrentPrice START ===");
+                        console.log("Product Type:", productType);
                         console.log("dynamicCalculatedPrice:", dynamicCalculatedPrice);
 
-                        
+                        // ========================================
+                        // GESTIONE TIPO PRODOTTO
+                        // ========================================
+
+                        // TIPO 1: PRODOTTO SEMPLICE
+                        // Prezzo fisso recuperato via AJAX, più eventuali opzioni checkbox
+                        if (productType === "semplice") {
+                            console.log("📦 SIMPLE PRODUCT MODE");
+
+                            if (simpleProductPrice > 0) {
+                                price = simpleProductPrice;
+                                console.log("✓ Using simple product price:", price);
+                            } else {
+                                console.log("⚠️ Simple product price not loaded yet");
+                                price = 0;
+                            }
+
+                            // Aggiungi opzioni checkbox YITH WAPO
+                            var optionsPrice = 0;
+                            $(".yith-wapo-option-value:checked").each(function() {
+                                var $option = $(this);
+                                var optionPrice = parseFloat($option.data("price")) || 0;
+                                var priceMethod = $option.data("price-method") || "increase";
+                                if (priceMethod === "increase") {
+                                    optionsPrice += optionPrice;
+                                }
+                            });
+
+                            var totalPrice = price + optionsPrice;
+                            priceText = totalPrice.toLocaleString("it-IT", {
+                                style: "currency",
+                                currency: "EUR"
+                            });
+
+                            console.log("Simple product - Base:", price, "Options:", optionsPrice, "Total:", totalPrice);
+
+                            return {
+                                price: totalPrice,
+                                basePrice: price,
+                                optionsPrice: optionsPrice,
+                                isSquareMeter: false,
+                                formatted: priceText
+                            };
+                        }
+
+                        // TIPO 2: PRODOTTO VARIABILE
+                        // Usa la logica esistente con variazioni e opzioni
+                        if (productType === "variabile") {
+                            console.log("🔀 VARIABLE PRODUCT MODE");
+                            // La logica continua sotto con il codice esistente
+                        }
+
+                        // TIPO 3: PRODOTTO AL METRO QUADRO
+                        // Larghezza × Altezza × Prezzo base
+                        if (productType === "metroquadro") {
+                            console.log("📏 SQUARE METER PRODUCT MODE");
+
+                            // Cerca campi lunghezza e altezza
+                            var $widthField = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\'], input[id*=\\\'width\\\'], input[id*=\\\'larghezza\\\'], input[id*=\\\'lunghezza\\\']");
+                            var $heightField = $("input[name*=\\\'height\\\'], input[name*=\\\'altezza\\\'], input[name*=\\\'Height\\\'], input[name*=\\\'Altezza\\\'], input[id*=\\\'height\\\'], input[id*=\\\'altezza\\\']");
+
+                            var widthCm = parseFloat($widthField.first().val()) || 0;
+                            var heightCm = parseFloat($heightField.first().val()) || 0;
+
+                            console.log("Dimensions - Width:", widthCm, "cm, Height:", heightCm, "cm");
+
+                            if (widthCm > 0 && heightCm > 0 && baseSquareMeterPrice > 0) {
+                                var widthM = widthCm / 100;
+                                var heightM = heightCm / 100;
+                                var area = widthM * heightM;
+                                price = baseSquareMeterPrice * area;
+
+                                console.log("✓ Calculated price:", baseSquareMeterPrice, "€/m² ×", area, "m² =", price, "€");
+
+                                // Aggiungi opzioni checkbox se presenti
+                                var optionsPrice = 0;
+                                $(".yith-wapo-option-value:checked").each(function() {
+                                    var $option = $(this);
+                                    var optionPrice = parseFloat($option.data("price")) || 0;
+                                    var priceMethod = $option.data("price-method") || "increase";
+                                    if (priceMethod === "increase") {
+                                        optionsPrice += optionPrice;
+                                    }
+                                });
+
+                                var totalPrice = price + optionsPrice;
+                                priceText = totalPrice.toLocaleString("it-IT", {
+                                    style: "currency",
+                                    currency: "EUR"
+                                });
+
+                                return {
+                                    price: totalPrice,
+                                    basePrice: price,
+                                    optionsPrice: optionsPrice,
+                                    isSquareMeter: true,
+                                    formatted: priceText
+                                };
+                            } else {
+                                console.log("⚠️ Missing dimensions or base price - Width:", widthCm, "Height:", heightCm, "Base:", baseSquareMeterPrice);
+                                return {
+                                    price: 0,
+                                    basePrice: 0,
+                                    optionsPrice: 0,
+                                    isSquareMeter: true,
+                                    formatted: "€0,00"
+                                };
+                            }
+                        }
+
+                        // ========================================
+                        // LOGICA ESISTENTE PER PRODOTTI VARIABILI
+                        // ========================================
 
                         // PRIORITÀ MASSIMA: Usa il prezzo calcolato dagli eventi del plugin se disponibile
                         if (dynamicCalculatedPrice > 0) {
@@ -1740,6 +1901,7 @@ class WC_Cart_Product_Summary_Pro {
                         currentVariationData = variation;
                         var productId = $(".wc-cart-product-summary").data("product-id");
                         getProductVatRate(productId);
+                        getProductPrice(); // Aggiorna il prezzo base per variazioni
                         setTimeout(updateSummary, 100);
                     });
 
@@ -1747,6 +1909,7 @@ class WC_Cart_Product_Summary_Pro {
                         currentVariationData = null;
                         var productId = $(".wc-cart-product-summary").data("product-id");
                         getProductVatRate(productId);
+                        getProductPrice(); // Ricarica il prezzo base
                         setTimeout(updateSummary, 100);
                     });
                     
@@ -1841,6 +2004,7 @@ class WC_Cart_Product_Summary_Pro {
             'show_total' => 'yes',         // Mostra sezione "Totale Complessivo"
             'show_vat' => $this->get_option('show_vat'),           // Mostra calcolo IVA
             'show_add_to_cart' => $this->get_option('show_add_to_cart'), // Mostra bottone Aggiungi al carrello
+            'prodotto' => 'variabile',     // Tipo prodotto: semplice, variabile, metroquadro
             'cart_color' => '',            // Colore personalizzato sezione carrello
             'selected_color' => '',        // Colore personalizzato sezione selezione
             'total_color' => '',           // Colore personalizzato sezione totale
@@ -1894,6 +2058,7 @@ class WC_Cart_Product_Summary_Pro {
         <!-- Container principale del widget con attributi di configurazione -->
         <div class="wc-cart-product-summary"
              data-product-id="<?php echo esc_attr($product_id); ?>"
+             data-product-type="<?php echo esc_attr($atts['prodotto']); ?>"
              data-show-price-zero="<?php echo esc_attr($atts['show_price_zero']); ?>"
              data-show-cart="<?php echo esc_attr($atts['show_cart']); ?>"
              data-show-selected="<?php echo esc_attr($atts['show_selected']); ?>"
@@ -2104,6 +2269,54 @@ class WC_Cart_Product_Summary_Pro {
                 'product_id' => $product_id,
                 'variation_id' => $variation_id,
                 'tax_class' => $product ? $product->get_tax_class() : "N/A"
+            )
+        ));
+    }
+
+    /**
+     * Handler AJAX per recuperare il prezzo del prodotto
+     * Utilizzata dal JavaScript per ottenere il prezzo base dei prodotti semplici
+     * e per calcoli al metro quadro
+     */
+    public function ajax_get_product_price() {
+        // Verifica il nonce per sicurezza
+        check_ajax_referer('product_price_nonce', 'nonce');
+
+        $product_id = intval($_POST['product_id']);
+        $variation_id = isset($_POST['variation_id']) ? intval($_POST['variation_id']) : 0;
+        $product_type = isset($_POST['product_type']) ? sanitize_text_field($_POST['product_type']) : 'semplice';
+
+        // Se c'è una variante, usa quella; altrimenti usa il prodotto principale
+        if ($variation_id > 0) {
+            $product = wc_get_product($variation_id);
+        } else {
+            $product = wc_get_product($product_id);
+        }
+
+        $price = 0;
+        $regular_price = 0;
+        $sale_price = 0;
+
+        if ($product) {
+            $price = floatval($product->get_price());
+            $regular_price = floatval($product->get_regular_price());
+            $sale_price = floatval($product->get_sale_price());
+
+            // Debug
+            error_log("Product Price Debug - Product ID: $product_id, Variation ID: $variation_id, Type: $product_type, Price: $price");
+        }
+
+        // Ritorna il prezzo in formato JSON
+        wp_send_json_success(array(
+            'price' => $price,
+            'regular_price' => $regular_price,
+            'sale_price' => $sale_price > 0 ? $sale_price : $price,
+            'formatted' => wc_price($price),
+            'debug' => array(
+                'product_id' => $product_id,
+                'variation_id' => $variation_id,
+                'product_type' => $product_type,
+                'wc_product_type' => $product ? $product->get_type() : "N/A"
             )
         ));
     }
