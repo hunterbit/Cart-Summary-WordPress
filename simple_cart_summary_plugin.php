@@ -597,6 +597,45 @@ class WC_Cart_Product_Summary_Pro {
                     var productType = "variabile"; // Tipo prodotto: semplice, variabile, metroquadro
                     var simpleProductPrice = 0; // Prezzo fisso per prodotti semplici (da AJAX)
                     var baseSquareMeterPrice = 0; // Prezzo base al m² per prodotti metroquadro
+                    var isLaserPage = window.location.href.indexOf("https://graphicart3d.it/prodotto/laser/") === 0;
+
+                    function scheduleLaserPriceRead() {
+                        if (!isLaserPage) {
+                            return;
+                        }
+                        [200, 600, 1200].forEach(function(delay) {
+                            setTimeout(readCalculatedPrice, delay);
+                        });
+                    }
+
+                    function getLaserDomPrice() {
+                        var $laserRoot = $("#calcolo-costi");
+                        var $priceWraps;
+
+                        if ($laserRoot.length) {
+                            $priceWraps = $laserRoot.find(".tc-price-wrap");
+                        } else {
+                            $priceWraps = $("form.variations_form.cart .tc-price-wrap");
+                        }
+
+                        if ($priceWraps.length) {
+                            var $visibleWraps = $priceWraps.filter(":visible");
+                            if ($visibleWraps.length) {
+                                $priceWraps = $visibleWraps;
+                            }
+                        }
+
+                        var $laserPrices = $priceWraps.find(".price.tc-price .woocommerce-Price-amount.amount bdi");
+                        if (!$laserPrices.length) {
+                            return { found: false, price: 0, text: "" };
+                        }
+
+                        var priceText = $laserPrices.last().text().trim();
+                        var match = priceText.match(/([\\d.,]+)/);
+                        var price = match ? parseFloat(match[1].replace(",", ".")) : 0;
+
+                        return { found: true, price: price, text: priceText };
+                    }
 
                     // Funzione per leggere i limiti dal campo quantità originale
                     function readQuantityLimits() {
@@ -642,6 +681,19 @@ class WC_Cart_Product_Summary_Pro {
                     // Funzione per leggere il prezzo dall\'elemento HTML specifico
                     function readCalculatedPrice() {
                         console.log("📍 Attempting to read calculated price...");
+                        if (isLaserPage) {
+                            var laserInfo = getLaserDomPrice();
+                            if (laserInfo.found) {
+                                console.log("💰 Prezzo trovato per laser:", laserInfo.text);
+
+                                if (!isNaN(laserInfo.price) && laserInfo.price > 0) {
+                                    dynamicCalculatedPrice = laserInfo.price;
+                                    console.log("✅ Prezzo laser aggiornato (readCalculatedPrice):", dynamicCalculatedPrice);
+                                    updateSummary();
+                                    return;
+                                }
+                            }
+                        }
 
                         // Controllo dimensioni obbligatorie se presenti
                         var $widthFieldReq = $("input[name*=\\\'width\\\'], input[name*=\\\'larghezza\\\'], input[name*=\\\'lunghezza\\\'], input[name*=\\\'Width\\\'], input[name*=\\\'Larghezza\\\'], input[name*=\\\'Lunghezza\\\']");
@@ -760,6 +812,7 @@ class WC_Cart_Product_Summary_Pro {
                     $(document).on("tm-epo-check-dpd tm-epo-update", function() {
                         console.log("🎯 TM EPO event fired, reading calculated price...");
                         setTimeout(readCalculatedPrice, 500);
+                        scheduleLaserPriceRead();
                     });
 
                     // Event listener su TUTTI i campi input della pagina prodotto
@@ -767,18 +820,26 @@ class WC_Cart_Product_Summary_Pro {
                     $(document).on("input change blur", "input[type=text], input[type=number]", function() {
                         console.log("🎯 Text/Number input changed, reading calculated price...");
                         setTimeout(readCalculatedPrice, 800); // Aumentato timeout per dare più tempo al calcolo
+                        scheduleLaserPriceRead();
                     });
 
                     // Event listener per checkbox e radio button (opzioni prodotto)
                     $(document).on("change click", "input[type=checkbox], input[type=radio]", function() {
                         console.log("🎯 Checkbox/Radio changed, reading calculated price...");
                         setTimeout(readCalculatedPrice, 800);
+                        scheduleLaserPriceRead();
                     });
 
                     // Event listener per select (dropdown)
                     $(document).on("change", "select", function() {
                         console.log("🎯 Select changed, reading calculated price...");
                         setTimeout(readCalculatedPrice, 800);
+                        scheduleLaserPriceRead();
+                    });
+
+                    $(document).on("click", ".cfvsw-swatches-option, .cfvsw-label-option", function() {
+                        console.log("🎯 Swatch clicked, reading calculated price...");
+                        scheduleLaserPriceRead();
                     });
 
                     // Event listener SPECIFICO per i campi di calcolo laser (lunghezza e altezza)
@@ -790,6 +851,19 @@ class WC_Cart_Product_Summary_Pro {
                             console.log("🔍 Cercando prezzo laser calcolato...");
 
                             // Usa la funzione globale isInCartWidget() per escludere elementi del carrello laterale
+
+                            // Strategia 0: Prezzo nel container laser
+                            var laserInfo = getLaserDomPrice();
+                            if (laserInfo.found) {
+                                console.log("💰 Prezzo trovato per laser:", laserInfo.text);
+
+                                if (!isNaN(laserInfo.price) && laserInfo.price > 0) {
+                                    dynamicCalculatedPrice = laserInfo.price;
+                                    console.log("✅ Prezzo laser aggiornato (strategia 0):", dynamicCalculatedPrice);
+                                    updateSummary();
+                                    return;
+                                }
+                            }
 
                             // Strategia 1: Cerca nel container tc-price-wrap con label "Totale:" (SOLO nel contenuto prodotto)
                             var $totalWrap = $(".tc-price-wrap").filter(function() {
@@ -974,6 +1048,37 @@ class WC_Cart_Product_Summary_Pro {
                         console.log("=== getCurrentPrice START ===");
                         console.log("Product Type:", productType);
                         console.log("dynamicCalculatedPrice:", dynamicCalculatedPrice);
+
+                        if (isLaserPage) {
+                            var laserInfo = getLaserDomPrice();
+                            if (laserInfo.found) {
+                                if (laserInfo.price > 0) {
+                                    price = laserInfo.price;
+                                    priceText = price.toLocaleString("it-IT", {
+                                        style: "currency",
+                                        currency: "EUR"
+                                    });
+                                    console.log("✓ Using laser DOM price:", price, "Text:", laserInfo.text);
+                                    console.log("SOURCE: Laser tc-price-wrap");
+
+                                    return {
+                                        price: price,
+                                        basePrice: price,
+                                        optionsPrice: 0,
+                                        isSquareMeter: true,
+                                        formatted: priceText
+                                    };
+                                }
+
+                                return {
+                                    price: 0,
+                                    basePrice: 0,
+                                    optionsPrice: 0,
+                                    isSquareMeter: true,
+                                    formatted: "€0,00"
+                                };
+                            }
+                        }
 
                         // ========================================
                         // GESTIONE TIPO PRODOTTO
@@ -1612,12 +1717,14 @@ class WC_Cart_Product_Summary_Pro {
                     $(document).on("change", ".yith-wapo-option-value, .yith-wapo-option select, .yith-wapo-option input, select[name*=\'yith_wapo\'], input[name*=\'yith_wapo\'], .yith-wapo-wrapper select, .yith-wapo-wrapper input", function() {
                         console.log("YITH WAPO option changed, updating summary...");
                         setTimeout(updateSummary, 100);
+                        scheduleLaserPriceRead();
                     });
 
                     // Event listener per cambiamenti nel form prodotto (Extra Product Options)
                     $(document).on("change", "form.cart select, form.cart input[type=radio], .variations_form select, .variations_form input", function() {
                         console.log("Product form changed, updating summary...");
                         setTimeout(updateSummary, 100);
+                        scheduleLaserPriceRead();
                     });
 
                     // Funzione per validare e correggere la quantità
@@ -1818,6 +1925,31 @@ class WC_Cart_Product_Summary_Pro {
                         console.log("👀 Watching", containersToWatch.length, "price containers (cart excluded)");
                     }, 1000);
 
+                    // Observer dedicato per il container laser nella pagina laser
+                    if (isLaserPage) {
+                        setTimeout(function() {
+                            var laserContainer = document.getElementById("calcolo-costi");
+                            if (!laserContainer) {
+                                laserContainer = document.querySelector("form.variations_form.cart");
+                            }
+                            if (!laserContainer || isInCartWidget($(laserContainer))) {
+                                return;
+                            }
+
+                            var laserObserver = new MutationObserver(function() {
+                                console.log("🔔 Laser container mutation detected");
+                                scheduleLaserPriceRead();
+                            });
+
+                            laserObserver.observe(laserContainer, {
+                                childList: true,
+                                subtree: true,
+                                characterData: true,
+                                attributes: true
+                            });
+                        }, 1000);
+                    }
+
                     // Observer potenziato per monitorare cambiamenti nel prezzo (ESCLUDENDO carrello)
                     var priceObserver = new MutationObserver(function(mutations) {
                         var shouldUpdate = false;
@@ -1903,6 +2035,7 @@ class WC_Cart_Product_Summary_Pro {
                         getProductVatRate(productId);
                         getProductPrice(); // Aggiorna il prezzo base per variazioni
                         setTimeout(updateSummary, 100);
+                        scheduleLaserPriceRead();
                     });
 
                     $(".variations_form").on("reset_data", function() {
@@ -1911,6 +2044,7 @@ class WC_Cart_Product_Summary_Pro {
                         getProductVatRate(productId);
                         getProductPrice(); // Ricarica il prezzo base
                         setTimeout(updateSummary, 100);
+                        scheduleLaserPriceRead();
                     });
                     
                     $(document.body).on("added_to_cart", function() {
